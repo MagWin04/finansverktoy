@@ -681,10 +681,241 @@ function FGGauge({ value }) {
   </div>);
 }
 
+
+
+
+// ══════════════════════════════════════
+// TOOL 7: Rebalansering ASK + Fondskonto
+// ══════════════════════════════════════
+function Rebalancer() {
+  // === Hva du har i dag ===
+  const [askVerdi, setAskVerdi] = useState(5000000);
+  const [askKostpris, setAskKostpris] = useState(3000000);
+  const [fkRenter, setFkRenter] = useState(1000000);
+  const [fkAksjer, setFkAksjer] = useState(0);
+  const [targetEq, setTargetEq] = useState(50);
+
+  // Beregninger — i dag
+  const askGevinst = Math.max(0, askVerdi - askKostpris);
+  const totalVerdi = askVerdi + fkRenter + fkAksjer;
+  const totalAksjer = askVerdi + fkAksjer; // ASK = 100% aksjer i dag
+  const totalRenter = fkRenter;
+  const aktuellPct = totalVerdi > 0 ? (totalAksjer / totalVerdi) * 100 : 0;
+  const diff = aktuellPct - targetEq;
+
+  // Målberegning
+  const målAksjer = totalVerdi * (targetEq / 100);
+  const målRenter = totalVerdi - målAksjer;
+  const måFlytte = totalAksjer - målAksjer; // positivt = må redusere aksjer
+
+  // === Strategier for å nå mål (kun hvis vi har for mye aksjer) ===
+
+  // Strategi A: Bytt til DNB Aktiv 80 i ASK (ingen uttak)
+  // ASK gir da 80% aksjer. Ny total aksjer = askVerdi*0.8 + fkAksjer
+  const sA_aksjer = askVerdi * 0.80 + fkAksjer;
+  const sA_pct = totalVerdi > 0 ? (sA_aksjer / totalVerdi) * 100 : 0;
+
+  // Strategi B: Ta ut kostpris skattefritt, plasser i rentefond
+  const sB_uttak = askKostpris;
+  const sB_askEtter = askVerdi - sB_uttak;
+  const sB_aksjer = sB_askEtter + fkAksjer; // resten i ASK er fortsatt aksjer
+  const sB_pct = totalVerdi > 0 ? (sB_aksjer / totalVerdi) * 100 : 0;
+
+  // Strategi C: Kombiner — bytt ASK til 80% + ta ut kostpris til renter
+  const sC_askEtter = askVerdi - askKostpris;
+  const sC_aksjer = sC_askEtter * 0.80 + fkAksjer;
+  const sC_pct = totalVerdi > 0 ? (sC_aksjer / totalVerdi) * 100 : 0;
+
+  // Strategi D: Optimalt uttak (kan innebære skatt)
+  // Vi vil: askEtter * askFondAndel + fkAksjer + (uttak til renter = 0 aksjer) = målAksjer
+  // Prøv med 100% aksjefond i ASK først:
+  // (askVerdi - uttak) * 1.0 + fkAksjer = målAksjer → uttak = askVerdi + fkAksjer - målAksjer
+  let sD_uttak100 = totalAksjer - målAksjer;
+  sD_uttak100 = Math.max(0, Math.min(askVerdi, sD_uttak100));
+  const sD_skattefri100 = Math.min(sD_uttak100, askKostpris);
+  const sD_skattbar100 = Math.max(0, sD_uttak100 - askKostpris);
+  const sD_gevinstAndel = askVerdi > 0 ? askGevinst / askVerdi : 0;
+  const sD_skatt100 = sD_skattbar100 * sD_gevinstAndel * EFF_SKATT;
+
+  // Prøv med 80% kombifond i ASK:
+  // (askVerdi - uttak) * 0.80 + fkAksjer = målAksjer → uttak = askVerdi - (målAksjer - fkAksjer) / 0.80
+  let sD_uttak80 = fkAksjer < målAksjer ? askVerdi - (målAksjer - fkAksjer) / 0.80 : askVerdi;
+  sD_uttak80 = Math.max(0, Math.min(askVerdi, sD_uttak80));
+  const sD_skattefri80 = Math.min(sD_uttak80, askKostpris);
+  const sD_skattbar80 = Math.max(0, sD_uttak80 - askKostpris);
+  const sD_skatt80 = sD_skattbar80 * sD_gevinstAndel * EFF_SKATT;
+
+  // Velg billigste
+  const bruk80 = sD_skatt80 <= sD_skatt100;
+  const sD_uttak = bruk80 ? sD_uttak80 : sD_uttak100;
+  const sD_skatt = bruk80 ? sD_skatt80 : sD_skatt100;
+  const sD_fond = bruk80 ? "DNB Aktiv 80" : "100% aksjefond";
+  const sD_askEtter = askVerdi - sD_uttak;
+  const sD_aksjer = sD_askEtter * (bruk80 ? 0.80 : 1.0) + fkAksjer;
+  const sD_pct = (totalVerdi - sD_skatt) > 0 ? (sD_aksjer / (totalVerdi - sD_skatt)) * 100 : 0;
+
+  const needsRebalance = Math.abs(diff) >= 2;
+  const needsLess = diff > 0; // har for mye aksjer
+
+  return (<div>
+    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
+      <div>
+        <SL>I dag</SL>
+        <div style={{ padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: T.accent, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Aksjesparekonto (ASK)</div>
+          <Slider label="Markedsverdi" value={askVerdi} onChange={setAskVerdi} min={0} max={50000000} step={50000} format={v => fmtKr(v)} />
+          <Slider label="Kostpris (skattefritt uttak)" value={askKostpris} onChange={setAskKostpris} min={0} max={askVerdi} step={50000} format={v => fmtKr(v)} />
+          <div style={{ fontSize: 11, color: T.textTer, marginTop: -8 }}>Urealisert gevinst: {fmtKr(askGevinst)}</div>
+        </div>
+
+        <div style={{ padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}`, marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: T.green, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Fondskonto</div>
+          <Slider label="Rentefond" value={fkRenter} onChange={setFkRenter} min={0} max={20000000} step={50000} format={v => fmtKr(v)} />
+          <Slider label="Aksjefond" value={fkAksjer} onChange={setFkAksjer} min={0} max={20000000} step={50000} format={v => fmtKr(v)} />
+        </div>
+
+        <Slider label="Ønsket aksjeandel" value={targetEq} onChange={setTargetEq} min={0} max={100} suffix=" %" decimals={0} />
+      </div>
+
+      <div>
+        <SL>Oversikt</SL>
+
+        {/* Hero stat */}
+        <div style={{ background: Math.abs(diff) < 3 ? T.greenGlow : T.orangeGlow, border: `1px solid ${Math.abs(diff) < 3 ? "rgba(48,209,88,0.15)" : "rgba(255,159,10,0.15)"}`, borderRadius: 16, padding: 20, marginBottom: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: T.textSec }}>Din aksjeandel i dag</div>
+          <div style={{ fontSize: 48, fontWeight: 800, color: Math.abs(diff) < 3 ? T.green : T.orange, lineHeight: 1.1, marginTop: 4 }}>{fmtPct(aktuellPct, 0)}</div>
+          <div style={{ fontSize: 14, color: T.textSec, marginTop: 6 }}>
+            {Math.abs(diff) < 2 ? "✓ I mål!" : diff > 0 ? `${fmtPct(diff, 0)} over mål (${targetEq}%)` : `${fmtPct(Math.abs(diff), 0)} under mål (${targetEq}%)`}
+          </div>
+        </div>
+
+        {/* Breakdown */}
+        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+          <StatBox label="Totalverdi" value={fmtKr(totalVerdi)} color={T.text} />
+          <StatBox label="Aksjer" value={fmtKr(totalAksjer)} color={T.green} sub={`Mål: ${fmtKr(målAksjer)}`} />
+          <StatBox label="Renter" value={fmtKr(totalRenter)} color={T.teal} sub={`Mål: ${fmtKr(målRenter)}`} />
+        </div>
+
+        {/* Visual bar */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ height: 32, borderRadius: 10, overflow: "hidden", display: "flex", background: "rgba(255,255,255,0.04)", position: "relative" }}>
+            <div style={{ width: `${aktuellPct}%`, background: `linear-gradient(90deg, ${T.accent}, ${T.green})`, transition: "width 0.3s", display: "flex", alignItems: "center", paddingLeft: 10 }}>
+              {aktuellPct > 20 && <span style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>Aksjer {fmtPct(aktuellPct, 0)}</span>}
+            </div>
+            <div style={{ flex: 1, background: T.teal, opacity: 0.15, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 10 }}>
+              {(100 - aktuellPct) > 20 && <span style={{ fontSize: 12, fontWeight: 600, color: T.teal }}>Renter {fmtPct(100 - aktuellPct, 0)}</span>}
+            </div>
+          </div>
+          <div style={{ position: "relative", height: 14, marginTop: 2 }}>
+            <div style={{ position: "absolute", left: `${targetEq}%`, transform: "translateX(-50%)", fontSize: 10, color: T.orange, fontWeight: 600 }}>▲ Mål {targetEq}%</div>
+          </div>
+        </div>
+
+        {/* Rebalancing strategies */}
+        {needsRebalance && needsLess && (
+          <CB label="Hvordan nå målet — skatteoptimalt">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+              <StrategyCard
+                title="A: Bytt til 80/20 kombifond i ASK"
+                result={sA_pct} target={targetEq}
+                lines={[
+                  `Bytter alt i ASK til DNB Aktiv 80 (80% aksjer, 20% renter)`,
+                  `Ingen uttak fra ASK — helt skattefritt`,
+                ]}
+                tax={0}
+              />
+
+              <StrategyCard
+                title="B: Ta ut kostpris skattefritt til rentefond"
+                result={sB_pct} target={targetEq}
+                lines={[
+                  `Tar ut ${fmtKr(sB_uttak)} fra ASK (kostpris = skattefritt)`,
+                  `Plasserer i rentefond på fondskonto`,
+                  `${fmtKr(sB_askEtter)} blir igjen i ASK (100% aksjer)`,
+                ]}
+                tax={0}
+              />
+
+              <StrategyCard
+                title="C: Kombiner — 80/20 i ASK + ta ut kostpris"
+                result={sC_pct} target={targetEq}
+                lines={[
+                  `Tar ut ${fmtKr(askKostpris)} skattefritt fra ASK`,
+                  `Bytter resten (${fmtKr(askVerdi - askKostpris)}) til DNB Aktiv 80`,
+                  `Kostpris-uttaket til rentefond på fondskonto`,
+                ]}
+                tax={0}
+              />
+
+              {sD_uttak > 0 && sD_skatt >= 0 && (
+                <StrategyCard
+                  title={`D: Optimalt uttak (${sD_fond} i ASK)`}
+                  result={sD_pct} target={targetEq}
+                  lines={[
+                    `Tar ut ${fmtKr(sD_uttak)} fra ASK`,
+                    sD_skatt > 0 ? `${fmtKr(Math.min(sD_uttak, askKostpris))} skattefritt + ${fmtKr(Math.max(0, sD_uttak - askKostpris))} skattepliktig` : `Alt innenfor skattefritt beløp`,
+                    `Resten (${fmtKr(sD_askEtter)}) i ${sD_fond} i ASK`,
+                  ]}
+                  tax={sD_skatt}
+                />
+              )}
+            </div>
+          </CB>
+        )}
+
+        {needsRebalance && !needsLess && (
+          <CB label="Hvordan nå målet">
+            <div style={{ fontSize: 12.5, color: T.textSec, lineHeight: 1.7 }}>
+              Du trenger <strong style={{ color: T.green }}>{fmtKr(Math.abs(måFlytte))} mer i aksjer</strong> for å nå {targetEq}%.
+              <div style={{ marginTop: 8, fontSize: 12, color: T.textTer }}>
+                → Flytt rentefond til aksjefond på fondskonto, eller sett inn nye midler i ASK.
+              </div>
+            </div>
+          </CB>
+        )}
+
+        {!needsRebalance && (
+          <CB>
+            <div style={{ textAlign: "center", padding: 10, color: T.green, fontSize: 14, fontWeight: 600 }}>
+              ✓ Porteføljen er innenfor mål — ingen rebalansering nødvendig
+            </div>
+          </CB>
+        )}
+      </div>
+    </div>
+    <div style={{ marginTop: 18, padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
+      <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}><strong style={{ color: T.textSec }}>ASK-regler:</strong> Kun aksjefond og kombifond med min. 80% aksjeandel i ASK. Bytte mellom fond i ASK er skattefritt. Ved uttak: kostpris kan tas ut skattefritt, gevinst beskattes med {fmtPct(EFF_SKATT * 100)} eff. sats. Rentefond må ligge på fondskonto.</div>
+    </div>
+  </div>);
+}
+
+function StrategyCard({ title, result, target, lines, tax }) {
+  const diff = Math.abs(result - target);
+  const isMatch = diff < 3;
+  return (
+    <div style={{ padding: "12px 14px", background: isMatch ? "rgba(48,209,88,0.04)" : "transparent", borderRadius: 11, border: `1px solid ${isMatch ? "rgba(48,209,88,0.15)" : T.border}` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: isMatch ? T.green : T.text }}>{title}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 15, fontWeight: 800, color: isMatch ? T.green : T.orange }}>{fmtPct(result, 0)}</span>
+          {isMatch && <span style={{ fontSize: 10, color: T.green, fontWeight: 600 }}>✓</span>}
+        </div>
+      </div>
+      {lines.map((l, i) => <div key={i} style={{ fontSize: 12, color: T.textSec, lineHeight: 1.6, paddingLeft: 8 }}>• {l}</div>)}
+      <div style={{ marginTop: 6, fontSize: 11, color: T.textTer }}>
+        Skatt: {tax > 0 ? <span style={{ color: T.red }}>{fmtKr(tax)}</span> : <span style={{ color: T.green }}>Ingen</span>}
+        {" · "}Avvik fra mål: {fmtPct(diff)}
+      </div>
+    </div>
+  );
+}
+
 // ══ Main ══
 const tools = [
   { id: "compound", label: "Rentes rente", icon: "📈" },
   { id: "wealth", label: "Wealth Planner", icon: "🏦" },
+  { id: "rebalance", label: "Rebalansering", icon: "⚖️" },
   { id: "feeimpact", label: "Kostnadseffekt", icon: "💸" },
   { id: "fire", label: "FIRE", icon: "🔥" },
   { id: "loan", label: "Lånekalkulator", icon: "🏠" },
@@ -695,7 +926,7 @@ export default function App() {
   const [active, setActive] = useState("compound");
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  const render = () => { switch (active) { case "compound": return <CompoundCalc />; case "wealth": return <WealthPlanner />; case "feeimpact": return <FeeImpact />; case "fire": return <FIRE />; case "loan": return <Loan />; case "market": return <MarketPulse />; default: return null; } };
+  const render = () => { switch (active) { case "compound": return <CompoundCalc />; case "wealth": return <WealthPlanner />; case "rebalance": return <Rebalancer />; case "feeimpact": return <FeeImpact />; case "fire": return <FIRE />; case "loan": return <Loan />; case "market": return <MarketPulse />; default: return null; } };
 
   return (<div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'SF Pro Display',-apple-system,'Helvetica Neue',sans-serif", opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease" }}>
     <style>{MOBILE_CSS}</style>
