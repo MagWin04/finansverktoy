@@ -50,66 +50,79 @@ const thS = { padding: "8px 10px", textAlign: "right", color: T.textTer, fontWei
 function Td({ children, bold, sec, color }) { return (<td style={{ padding: "7px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums", color: color || (sec ? T.textSec : T.text), fontWeight: bold ? 600 : 400, fontSize: 12.5 }}>{children}</td>); }
 
 // ── Interactive Chart with axes, hover, fullscreen ──
-function IChart({ data, width = 360, height = 100, color = T.accent, xLabels, yFormat, xFormat, bands, bandColors, title }) {
+function IChart({ data, width: baseW = 360, height: baseH = 120, color = T.accent, yFormat, xFormat, bands, bandColors, title }) {
   const [hover, setHover] = useState(null);
   const [fs, setFs] = useState(false);
   const svgRef = useRef(null);
   if (!data || data.length < 2) return null;
 
+  const w = fs ? 700 : baseW;
+  const h = fs ? 380 : baseH;
+
   const allVals = bands ? [...data, ...bands.flatMap(b => b)] : data;
-  const mx = Math.max(...allVals), mn = Math.min(...allVals.filter(v => v >= 0), 0);
+  const mx = Math.max(...allVals), mn = Math.min(...allVals);
   const rng = mx - mn || 1;
-  const padL = 55, padR = 10, padT = 10, padB = 22;
-  const cw = width - padL - padR, ch = height - padT - padB;
+  const padL = fs ? 80 : 65, padR = 15, padT = 12, padB = 26;
+  const cw = w - padL - padR, ch = h - padT - padB;
   const toX = (i) => padL + (i / (data.length - 1)) * cw;
   const toY = (v) => padT + ch - ((v - mn) / rng) * ch;
   const pts = (arr) => arr.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
   const gid = `ic${Math.random().toString(36).slice(2, 8)}`;
 
-  const yTicks = 5;
+  const yTicks = fs ? 8 : 5;
   const yStep = rng / yTicks;
   const yVals = Array.from({ length: yTicks + 1 }, (_, i) => mn + i * yStep);
-  const xStep = Math.max(1, Math.floor(data.length / 6));
-  const xIdxs = Array.from({ length: Math.ceil(data.length / xStep) }, (_, i) => i * xStep).filter(i => i < data.length);
+  const xTicks = fs ? 10 : 6;
+  const xStep = Math.max(1, Math.floor(data.length / xTicks));
+  const xIdxs = [];
+  for (let i = 0; i < data.length; i += xStep) xIdxs.push(i);
   if (xIdxs[xIdxs.length - 1] !== data.length - 1) xIdxs.push(data.length - 1);
 
-  const onMove = (e) => { const rect = svgRef.current?.getBoundingClientRect(); if (!rect) return; const x = ((e.clientX - rect.left) / rect.width) * width; const idx = Math.round(((x - padL) / cw) * (data.length - 1)); if (idx >= 0 && idx < data.length) setHover(idx); };
+  const onMove = (e) => { const rect = svgRef.current?.getBoundingClientRect(); if (!rect) return; const relX = ((e.clientX - rect.left) / rect.width) * w; const idx = Math.round(((relX - padL) / cw) * (data.length - 1)); if (idx >= 0 && idx < data.length) setHover(idx); else setHover(null); };
 
-  const h = fs ? 400 : height;
-  const w = fs ? 700 : width;
+  const svgContent = (
+    <svg ref={svgRef} width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block", cursor: "crosshair" }} onMouseMove={onMove}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
+      {yVals.map((v, i) => (<g key={i}><line x1={padL} y1={toY(v)} x2={w - padR} y2={toY(v)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" /><text x={padL - 8} y={toY(v) + 3} textAnchor="end" fill={T.textTer} fontSize={fs ? "11" : "9"} fontFamily="system-ui">{yFormat ? yFormat(v) : fmt(v, 0)}</text></g>))}
+      {xIdxs.map(i => (<text key={i} x={toX(i)} y={h - 4} textAnchor="middle" fill={T.textTer} fontSize={fs ? "11" : "9"} fontFamily="system-ui">{xFormat ? xFormat(i) : i}</text>))}
+      {bands && bands.map((b, bi) => {
+        const bandPts = b.map((v, i) => `${toX(i)},${toY(v)}`);
+        const mainPtsRev = [...data].map((v, i) => `${toX(data.length - 1 - i)},${toY(data[data.length - 1 - i])}`);
+        return (<g key={bi}>
+          <polygon points={`${bandPts.join(" ")} ${mainPtsRev.join(" ")}`} fill={bandColors?.[bi] || "rgba(255,255,255,0.05)"} />
+          <polyline points={bandPts.join(" ")} fill="none" stroke={bi === 0 ? T.green : T.red} strokeWidth="1.5" strokeDasharray="5,4" opacity="0.6" />
+        </g>);
+      })}
+      <polygon points={`${toX(0)},${toY(mn)} ${pts(data)} ${toX(data.length - 1)},${toY(mn)}`} fill={`url(#${gid})`} />
+      <polyline points={pts(data)} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      {hover !== null && (<>
+        <line x1={toX(hover)} y1={padT} x2={toX(hover)} y2={h - padB} stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="3,3" />
+        <circle cx={toX(hover)} cy={toY(data[hover])} r="5" fill={color} stroke={T.text} strokeWidth="2" />
+      </>)}
+    </svg>
+  );
 
-  const chart = (
-    <div style={{ position: "relative" }} onMouseLeave={() => setHover(null)}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-        {title && <div style={{ fontSize: 10.5, color: T.textTer, textTransform: "uppercase", letterSpacing: "0.04em" }}>{title}</div>}
-        <button onClick={() => setFs(!fs)} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 5, padding: "2px 6px", color: T.textTer, cursor: "pointer", fontSize: 10 }}>{fs ? "✕" : "⛶"}</button>
-      </div>
-      <svg ref={svgRef} width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block", cursor: "crosshair" }} onMouseMove={onMove}>
-        <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
-        {/* Y axis */}
-        {yVals.map((v, i) => (<g key={i}><line x1={padL} y1={toY(v)} x2={w - padR} y2={toY(v)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" /><text x={padL - 6} y={toY(v) + 3} textAnchor="end" fill={T.textTer} fontSize="9" fontFamily="SF Mono,monospace">{yFormat ? yFormat(v) : fmt(v, 0)}</text></g>))}
-        {/* X axis */}
-        {xIdxs.map(i => (<text key={i} x={toX(i)} y={h - 2} textAnchor="middle" fill={T.textTer} fontSize="9" fontFamily="SF Mono,monospace">{xFormat ? xFormat(i) : (xLabels ? xLabels[i] : i)}</text>))}
-        {/* Bands */}
-        {bands && bands.map((b, bi) => (<g key={bi}><polygon points={`${pts(b)} ${toX(data.length - 1)},${toY(data[data.length - 1])} ${[...data].reverse().map((v, i) => `${toX(data.length - 1 - i)},${toY(v)}`).join(" ")}`} fill={bandColors?.[bi] || "rgba(255,255,255,0.05)"} /><polyline points={pts(b)} fill="none" stroke={bandColors?.[bi]?.replace(/0\.\d+\)/, "0.5)") || T.textTer} strokeWidth="1" strokeDasharray="4,3" /></g>))}
-        {/* Main line */}
-        <polygon points={`${toX(0)},${toY(mn)} ${pts(data)} ${toX(data.length - 1)},${toY(mn)}`} fill={`url(#${gid})`} />
-        <polyline points={pts(data)} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {/* Hover */}
-        {hover !== null && (<><line x1={toX(hover)} y1={padT} x2={toX(hover)} y2={h - padB} stroke="rgba(255,255,255,0.15)" strokeWidth="1" strokeDasharray="3,3" /><circle cx={toX(hover)} cy={toY(data[hover])} r="4" fill={color} stroke={T.text} strokeWidth="1.5" /></>)}
-      </svg>
-      {hover !== null && (
-        <div style={{ position: "absolute", top: 0, left: `${Math.min((toX(hover) / w) * 100, 70)}%`, transform: "translateX(-50%)", background: "rgba(16,16,20,0.95)", border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 10px", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 10 }}>
-          {xFormat && <div style={{ fontSize: 10, color: T.textTer }}>{xFormat(hover)}</div>}
-          <div style={{ fontSize: 13, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{yFormat ? yFormat(data[hover]) : fmt(data[hover], 0)}</div>
-          {bands && bands.map((b, bi) => (<div key={bi} style={{ fontSize: 11, color: T.textTer }}>{bi === 0 ? "+1%: " : "−1%: "}{yFormat ? yFormat(b[hover]) : fmt(b[hover], 0)}</div>))}
-        </div>
-      )}
+  const tooltip = hover !== null && (
+    <div style={{ position: "absolute", top: 4, left: `${Math.min(Math.max((toX(hover) / w) * 100, 15), 80)}%`, transform: "translateX(-50%)", background: "rgba(16,16,20,0.96)", border: `1px solid ${T.borderLight}`, borderRadius: 9, padding: "6px 12px", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+      {xFormat && <div style={{ fontSize: 10, color: T.textTer, marginBottom: 2 }}>{xFormat(hover)}</div>}
+      <div style={{ fontSize: 14, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{yFormat ? yFormat(data[hover]) : fmt(data[hover], 0)}</div>
+      {bands && bands.map((b, bi) => b[hover] !== undefined && (<div key={bi} style={{ fontSize: 11, color: bi === 0 ? T.green : T.red }}>{bi === 0 ? "+1%: " : "−1%: "}{yFormat ? yFormat(b[hover]) : fmt(b[hover], 0)}</div>))}
     </div>
   );
 
-  if (fs) return (<div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.92)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }} onClick={() => setFs(false)}><div style={{ maxWidth: 800, width: "100%" }} onClick={e => e.stopPropagation()}>{chart}</div></div>);
-  return chart;
+  const chartContent = (
+    <div style={{ position: "relative" }} onMouseLeave={() => setHover(null)}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        {title && <div style={{ fontSize: fs ? 13 : 10.5, color: T.textTer, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>{title}</div>}
+        <button onClick={(e) => { e.stopPropagation(); setFs(!fs); }} style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${T.border}`, borderRadius: 6, padding: "3px 8px", color: T.textSec, cursor: "pointer", fontSize: 11 }}>{fs ? "✕ Lukk" : "⛶ Fullskjerm"}</button>
+      </div>
+      {svgContent}
+      {tooltip}
+    </div>
+  );
+
+  if (fs) return (<div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }} onClick={() => setFs(false)}><div style={{ maxWidth: 900, width: "100%", background: T.surface, borderRadius: 20, padding: 28, border: `1px solid ${T.border}` }} onClick={e => e.stopPropagation()}>{chartContent}</div></div>);
+  return chartContent;
 }
 
 function MultiLineChart({ datasets, width = 360, height = 100, labels }) {
@@ -136,10 +149,17 @@ function CompoundCalc() {
   const [infl, setInfl] = useState(2.5);
 
   const r = useMemo(() => {
-    const calc = (r) => { const mr = r / 100 / 12; let b = init; const cd = [b]; for (let m = 1; m <= yrs * 12; m++) { b = b * (1 + mr) + mth; if (m % Math.max(1, Math.floor(yrs * 12 / 80)) === 0) cd.push(b); } return { final: b, cd }; };
+    const months = yrs * 12;
+    const sampleEvery = Math.max(1, Math.floor(months / 80));
+    const calc = (rt) => { const mr = rt / 100 / 12; let b = init; const cd = [b]; for (let m = 1; m <= months; m++) { b = b * (1 + mr) + mth; if (m % sampleEvery === 0) cd.push(b); } return { final: b, cd }; };
     const main = calc(rate);
     const hi = calc(rate + 1);
-    const lo = calc(rate - 1);
+    const lo = calc(Math.max(0, rate - 1));
+    // Ensure all arrays same length
+    const len = main.cd.length;
+    while (hi.cd.length < len) hi.cd.push(hi.cd[hi.cd.length - 1] || 0);
+    while (lo.cd.length < len) lo.cd.push(lo.cd[lo.cd.length - 1] || 0);
+    hi.cd.length = len; lo.cd.length = len;
     const contrib = init + mth * 12 * yrs;
     const gain = main.final - contrib;
     const realVal = main.final / Math.pow(1 + infl / 100, yrs);
@@ -166,7 +186,7 @@ function CompoundCalc() {
           <StatBox label="Realverdi" value={fmtKr(r.realVal)} color={T.teal} sub={`Realavk.: ${fmtPct(r.rr * 100)}`} />
         </div>
         <CB style={{ padding: 12 }}>
-          <IChart data={r.cd} bands={[r.hi, r.lo]} bandColors={["rgba(48,209,88,0.15)", "rgba(255,69,58,0.15)"]} color={T.accent} title={`Verdiutvikling — ±1% sensitivitet`} yFormat={v => fmtKr(v)} xFormat={i => `${Math.round(i / r.cd.length * yrs)} år`} height={110} />
+          <IChart data={r.cd} bands={[r.hi, r.lo]} bandColors={["rgba(48,209,88,0.12)", "rgba(255,69,58,0.12)"]} color={T.accent} title={`Verdiutvikling — ±1% sensitivitet`} yFormat={v => fmtKr(v)} xFormat={i => `${Math.round(i / r.cd.length * yrs)} år`} height={140} />
           <div style={{ display: "flex", gap: 14, marginTop: 6 }}>
             {[{ l: `${fmtPct(rate)} (hoved)`, c: T.accent }, { l: `+1% (${fmtPct(rate + 1)})`, c: T.green }, { l: `−1% (${fmtPct(rate - 1)})`, c: T.red }].map(x => (
               <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 10, height: 3, borderRadius: 2, background: x.c }} /><span style={{ fontSize: 10, color: T.textTer }}>{x.l}</span></div>))}
@@ -204,7 +224,7 @@ function WealthPlanner() {
   const returns = { pm: 3.5, re: 4.5, kr: 6.25, ak: 7.25 };
   const prof = profiles[riskP];
   const expRet = (prof.pm * returns.pm + prof.re * returns.re + prof.kr * returns.kr + prof.ak * returns.ak) / 100;
-  const vol = prof.ak * 0.16 + prof.kr * 0.06 + prof.re * 0.03 + prof.pm * 0.005;
+  const vol = (prof.ak * 16 + prof.kr * 6 + prof.re * 3 + prof.pm * 0.5) / 100;
   const volPct = vol / 100;
 
   const result = useMemo(() => {
