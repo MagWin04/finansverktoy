@@ -1340,7 +1340,12 @@ function LonnVsUtbytte() {
   };
 
   // Beregn for ulike lønnsnivåer
-  const calcScenario = (lonn) => {
+  const maxLonnFromOverskudd = overskudd / (1 + FERIEPENGER_SATS + (agaSone / 100) * (1 + FERIEPENGER_SATS));
+
+  const calcScenario = (lonnInput) => {
+    // Cap lonn at what the company can afford
+    const lonn = Math.min(lonnInput, maxLonnFromOverskudd);
+    
     // Selskapets kostnad for lønn
     const feriepenger = lonn * FERIEPENGER_SATS;
     const aga = (lonn + feriepenger) * (agaSone / 100);
@@ -1375,17 +1380,18 @@ function LonnVsUtbytte() {
     return { lonn, feriepenger, aga, totalLonnskostnad, overskuddEtterLonn, selskapsskatt, tilUtbytte, skjerming, utbytteSkatt, nettoUtbytte, lonnSkatt, nettoLonn, nettoTotal, samletSkatt, pensjonsOpptjening, effSkattPct: overskudd > 0 ? (samletSkatt / overskudd) * 100 : 0 };
   };
 
-  // Find optimal: test every 10k from 0 to overskudd
+  // Find optimal: test every 25k from 0 to max affordable
   const scenarios = [];
   const step = 25000;
-  for (let l = 0; l <= overskudd; l += step) {
+  for (let l = 0; l <= maxLonnFromOverskudd + step; l += step) {
     scenarios.push(calcScenario(l));
   }
 
   const optimal = scenarios.reduce((best, s) => s.nettoTotal > best.nettoTotal ? s : best, scenarios[0]);
-  const altLonn = calcScenario(0);
-  const altUtbytte = calcScenario(Math.min(overskudd, overskudd / (1 + FERIEPENGER_SATS + agaSone / 100)));
-  const alt71G = calcScenario(Math.min(7.1 * 124028, overskudd / (1 + FERIEPENGER_SATS + agaSone / 100)));
+  const altKunUtbytte = calcScenario(0);
+  const altMaksLonn = calcScenario(maxLonnFromOverskudd);
+  const G = 124028;
+  const alt71G = calcScenario(Math.min(7.1 * G, maxLonnFromOverskudd));
 
   // Chart data: netto vs lønnsnivå
   const chartData = scenarios.map(s => s.nettoTotal);
@@ -1434,9 +1440,9 @@ function LonnVsUtbytte() {
               <tbody>
                 {[
                   { name: "★ Optimal", ...optimal, highlight: true },
-                  { name: "Kun utbytte", ...altLonn },
-                  { name: `Lønn opp til 7,1G`, ...alt71G },
-                  { name: "Maks lønn", ...altUtbytte },
+                  { name: "Kun utbytte", ...altKunUtbytte },
+                  { name: `Lønn til 7,1G`, ...alt71G },
+                  { name: "Maks lønn", ...altMaksLonn },
                 ].map((s, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${T.border}`, background: s.highlight ? "rgba(52,211,153,0.04)" : "transparent" }}>
                     <td style={{ padding: "8px 10px", fontSize: 12, color: s.highlight ? T.green : T.textSec, fontWeight: s.highlight ? 600 : 400 }}>{s.name}</td>
