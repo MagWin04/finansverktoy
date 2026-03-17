@@ -8,8 +8,8 @@ const MOBILE_CSS = `
     .content-padding { padding: 0 16px !important; }
     .bottom-padding { padding: 0 16px 30px !important; }
     .card-padding { padding: 18px !important; }
-    .tab-bar { gap: 2px !important; }
-    .tab-bar button { padding: 8px 10px !important; font-size: 12px !important; }
+    .nav-groups { flex-direction: column !important; gap: 12px !important; }
+    .nav-group-buttons { flex-wrap: wrap !important; }
     .profile-buttons { flex-wrap: wrap !important; }
   }
   @media (max-width: 480px) {
@@ -22,9 +22,9 @@ const fmtKr = (n) => `${fmt(n)} kr`;
 const fmtPct = (n, d = 1) => `${fmt(n, d)} %`;
 
 const OPPJUST = 1.72, SKATT_ALM = 0.22, EFF_SKATT = SKATT_ALM * OPPJUST;
-const FORMUE_S1 = 0.01, FORMUE_S2 = 0.011, FORMUE_BUNN = 1700000, VERDI_RABATT = 0.20, SKJERMINGSRENTE = 0.032;
+const FORMUE_S1 = 0.01, FORMUE_S2 = 0.011, FORMUE_BUNN = 1700000, VERDI_RABATT = 0.20, SKJERMINGSRENTE = 0.036;
 
-const T = { bg: "#08090a", surface: "#111214", surfaceAlt: "rgba(255,255,255,0.025)", border: "rgba(255,255,255,0.06)", borderLight: "rgba(255,255,255,0.1)", text: "#f5f5f7", textSec: "rgba(255,255,255,0.55)", textTer: "rgba(255,255,255,0.32)", accent: "#2997ff", accentGlow: "rgba(41,151,255,0.12)", green: "#30d158", greenGlow: "rgba(48,209,88,0.12)", orange: "#ff9f0a", orangeGlow: "rgba(255,159,10,0.12)", red: "#ff453a", redGlow: "rgba(255,69,58,0.12)", purple: "#bf5af2", teal: "#64d2ff", yellow: "#ffd60a", pink: "#ff375f" };
+const T = { bg: "#121418", surface: "#1a1c22", surfaceAlt: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.07)", borderLight: "rgba(255,255,255,0.12)", text: "#f0f0f3", textSec: "rgba(255,255,255,0.58)", textTer: "rgba(255,255,255,0.34)", accent: "#4da3ff", accentGlow: "rgba(77,163,255,0.1)", green: "#34d399", greenGlow: "rgba(52,211,153,0.1)", orange: "#fbbf24", orangeGlow: "rgba(251,191,36,0.1)", red: "#f87171", redGlow: "rgba(248,113,113,0.1)", purple: "#a78bfa", teal: "#67e8f9", yellow: "#fde68a", pink: "#f472b6" };
 
 // ── Shared UI ──
 function Slider({ label, value, onChange, min, max, step = 1, suffix = "", prefix = "", format, decimals }) {
@@ -450,7 +450,7 @@ function FeeImpact() {
   const [showTbl, setShowTbl] = useState(false);
 
   const calc = useCallback(fee => {
-    const nr = (gross - fee - plat) / 100 / 12;
+    const nr = (gross - fee) / 100 / 12;
     let b = init;
     const d = [b], yl = [];
     let totalFeesPaid = 0;
@@ -459,14 +459,14 @@ function FeeImpact() {
       b = b * (1 + nr) + mth;
       if (m % 12 === 0) {
         // Annual fees: approximate as fee% of average balance this year
-        totalFeesPaid += ((prevB + b) / 2) * ((fee + plat) / 100);
+        totalFeesPaid += ((prevB + b) / 2) * ((fee) / 100);
         prevB = b;
         yl.push(b);
         d.push(b);
       }
     }
     return { f: b, d, yl, totalFeesPaid };
-  }, [init, mth, yrs, gross, plat]);
+  }, [init, mth, yrs, gross]);
 
   const r0 = useMemo(() => calc(0), [calc]);
   const r1 = useMemo(() => calc(f1), [calc, f1]);
@@ -504,7 +504,6 @@ function FeeImpact() {
         <Slider label="Månedlig sparing" value={mth} onChange={setMth} min={0} max={50000} step={500} format={v => fmtKr(v)} />
         <Slider label="Tidshorisont" value={yrs} onChange={setYrs} min={5} max={50} suffix=" år" decimals={0} />
         <Slider label="Brutto avkastning" value={gross} onChange={setGross} min={2} max={15} step={0.25} suffix=" %" />
-        <Slider label="Plattformkostnad" value={plat} onChange={setPlat} min={0} max={0.5} step={0.01} suffix=" %" />
         <div style={{ marginTop: 6, padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
           <div style={{ fontSize: 11, color: T.textTer, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Forvaltningskostnader (TER)</div>
           <Slider label="Alt. A (indeksfond)" value={f1} onChange={setF1} min={0} max={1} step={0.01} suffix=" %" />
@@ -630,28 +629,79 @@ function FeeImpact() {
 // TOOL 4: FIRE
 // ══════════════════════════════════════
 function FIRE() {
-  const [inc, setInc] = useState(800000); const [exp, setExp] = useState(450000); const [sav, setSav] = useState(1500000);
-  const [ret, setRet] = useState(7); const [swr, setSwr] = useState(3.5); const [age, setAge] = useState(35);
-  const as = inc - exp, sr = inc > 0 ? (as / inc) * 100 : 0, fn = exp / (swr / 100) * 1.15;
-  let y = 0, b = sav; const cd = [b]; while (b < fn && y < 80) { b = b * (1 + ret / 100) + as; y++; cd.push(b); }
+  const [age, setAge] = useState(35);
+  const [arligSparing, setArligSparing] = useState(250000);
+  const [sparebeholdning, setSparebeholdning] = useState(1500000);
+  const [arligForbruk, setArligForbruk] = useState(450000);
+  const [ret, setRet] = useState(7);
+  const [infl, setInfl] = useState(2.5);
+
+  // Calculate FIRE number for different SWR scenarios
+  const swrScenarios = [3, 3.5, 4];
+  const fireNumbers = swrScenarios.map(swr => ({ swr, target: arligForbruk / (swr / 100) }));
+
+  // Build growth chart to each target
+  const results = fireNumbers.map(({ swr, target }) => {
+    let y = 0, b = sparebeholdning;
+    const cd = [b];
+    while (b < target && y < 80) { b = b * (1 + ret / 100) + arligSparing; y++; cd.push(b); }
+    return { swr, target, years: y, fireAge: age + y, cd, reached: y < 80 };
+  });
+
+  const main = results.find(r => r.swr === 3.5) || results[1];
+  const sr = (arligSparing + arligForbruk) > 0 ? (arligSparing / (arligSparing + arligForbruk)) * 100 : 0;
+  const realRet = ((1 + ret / 100) / (1 + infl / 100) - 1) * 100;
+
+  // How much could you withdraw per year at FIRE
+  const sustainableWithdrawal_3 = sparebeholdning > 0 ? sparebeholdning * 0.03 : 0;
+  const sustainableWithdrawal_4 = sparebeholdning > 0 ? sparebeholdning * 0.04 : 0;
+
   return (<div><div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
-    <div><SL>Parametere</SL>
-      <Slider label="Årsinntekt" value={inc} onChange={setInc} min={0} max={3000000} step={50000} format={v => fmtKr(v)} />
-      <Slider label="Årlige utgifter" value={exp} onChange={setExp} min={100000} max={2000000} step={25000} format={v => fmtKr(v)} />
-      <Slider label="Nåværende sparing" value={sav} onChange={setSav} min={0} max={20000000} step={100000} format={v => fmtKr(v)} />
+    <div><SL>Din situasjon</SL>
+      <Slider label="Alder" value={age} onChange={setAge} min={18} max={65} suffix=" år" decimals={0} />
+      <Slider label="Nåværende sparebeholdning" value={sparebeholdning} onChange={setSparebeholdning} min={0} max={20000000} step={100000} format={v => fmtKr(v)} />
+      <Slider label="Årlig sparing" value={arligSparing} onChange={setArligSparing} min={0} max={1000000} step={10000} format={v => fmtKr(v)} />
+      <Slider label="Årlig forbruk i FIRE" value={arligForbruk} onChange={setArligForbruk} min={100000} max={2000000} step={25000} format={v => fmtKr(v)} />
       <Slider label="Forventet avkastning" value={ret} onChange={setRet} min={0} max={15} step={0.25} suffix=" %" />
-      <Slider label="Trygg uttaksrate" value={swr} onChange={setSwr} min={2} max={6} step={0.25} suffix=" %" />
-      <Slider label="Alder" value={age} onChange={setAge} min={18} max={65} suffix=" år" decimals={0} /></div>
+      <Slider label="Inflasjon" value={infl} onChange={setInfl} min={0} max={8} step={0.25} suffix=" %" />
+    </div>
     <div><SL>FIRE-analyse</SL>
-      <div style={{ background: y < 80 ? T.greenGlow : T.orangeGlow, border: `1px solid ${y < 80 ? "rgba(48,209,88,0.15)" : "rgba(255,159,10,0.15)"}`, borderRadius: 16, padding: 18, marginBottom: 16, textAlign: "center" }}>
+      <div style={{ background: main.reached ? T.greenGlow : T.orangeGlow, border: `1px solid ${main.reached ? "rgba(52,211,153,0.15)" : "rgba(251,191,36,0.15)"}`, borderRadius: 16, padding: 20, marginBottom: 16, textAlign: "center" }}>
         <div style={{ fontSize: 13, color: T.textSec, marginBottom: 2 }}>Økonomisk uavhengig ved</div>
-        <div style={{ fontSize: 34, fontWeight: 800, color: y < 80 ? T.green : T.orange }}>{y < 80 ? `${age + y} år` : "80+"}</div></div>
-      <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-        <StatBox label="FIRE-tall" value={fmtKr(fn)} color={T.accent} sub="Inkl. skatteeffekt" />
-        <StatBox label="Sparerate" value={fmtPct(sr)} color={sr >= 50 ? T.green : sr >= 30 ? T.orange : T.red} />
-        <StatBox label="Mnd. sparing" value={fmtKr(as / 12)} color={as > 0 ? T.green : T.red} />
-        <StatBox label="Gjenstår" value={fmtKr(Math.max(0, fn - sav))} /></div>
-      <CB style={{ padding: 12 }}><IChart data={cd} color={T.green} title="Vei til FIRE" yFormat={v => fmtKr(v)} xFormat={i => `${age + i} år`} height={110} /></CB></div></div></div>);
+        <div style={{ fontSize: 42, fontWeight: 800, color: main.reached ? T.green : T.orange, lineHeight: 1.1 }}>{main.reached ? `${main.fireAge} år` : "80+"}</div>
+        <div style={{ fontSize: 13, color: T.textSec, marginTop: 6 }}>{main.reached ? `${main.years} år fra nå · 3,5% uttaksrate` : "Juster parametere"}</div>
+      </div>
+
+      <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+        <StatBox label="FIRE-tall (3,5%)" value={fmtKr(main.target)} color={T.accent} sub={`${fmtPct(3.5)} uttaksrate`} />
+        <StatBox label="Sparerate" value={fmtPct(sr)} color={sr >= 50 ? T.green : sr >= 30 ? T.orange : T.red} sub={`${fmtKr(arligSparing / 12)}/mnd`} />
+        <StatBox label="Gjenstår" value={fmtKr(Math.max(0, main.target - sparebeholdning))} color={T.textSec} sub={`Realavk.: ${fmtPct(realRet)}`} />
+      </div>
+
+      {/* SWR scenario comparison */}
+      <CB label="Uttaksrate-scenarier" style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {results.map(r => (
+            <div key={r.swr} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderRadius: 9, background: r.swr === 3.5 ? T.accentGlow : "transparent", border: `1px solid ${r.swr === 3.5 ? "rgba(77,163,255,0.2)" : T.border}` }}>
+              <div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: r.swr === 3.5 ? T.accent : T.text }}>{fmtPct(r.swr)} uttaksrate</span>
+                <span style={{ fontSize: 11, color: T.textTer, marginLeft: 8 }}>FIRE-tall: {fmtKr(r.target)}</span>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: r.reached ? T.green : T.orange }}>{r.reached ? `${r.fireAge} år` : "80+"}</span>
+                <span style={{ fontSize: 11, color: T.textTer, marginLeft: 6 }}>{r.reached ? `${r.years} år` : ""}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: T.textTer, marginTop: 8, lineHeight: 1.6 }}>
+          <strong style={{ color: T.textSec }}>3%</strong> = konservativ (historisk trygg). <strong style={{ color: T.textSec }}>3,5%</strong> = moderat. <strong style={{ color: T.textSec }}>4%</strong> = Trinity Study-regelen (30+ år horisont).
+        </div>
+      </CB>
+
+      <CB style={{ padding: 12 }}><IChart data={main.cd} color={T.green} title={`Vei til FIRE (${fmtPct(3.5)} uttaksrate)`} yFormat={v => fmtKr(v)} xFormat={i => `${age + i} år`} height={120} /></CB>
+    </div>
+  </div></div>);
 }
 
 // ══════════════════════════════════════
@@ -1069,100 +1119,113 @@ function StrategyCard({ title, result, target, lines, tax }) {
 
 
 // ══════════════════════════════════════
+
+// ══════════════════════════════════════
 // TOOL 8: Pensjonsgap
 // ══════════════════════════════════════
 function PensjonGap() {
   const [alder, setAlder] = useState(35);
+  const [kjonn, setKjonn] = useState("mann");
   const [inntekt, setInntekt] = useState(800000);
   const [onsketPct, setOnsketPct] = useState(66);
   const [pensjonsalder, setPensjonsalder] = useState(67);
-  const [tpSats, setTpSats] = useState(5);
+  const [tpSatsLav, setTpSatsLav] = useState(5);
+  const [tpSatsHoy, setTpSatsHoy] = useState(15);
   const [tpSaldo, setTpSaldo] = useState(500000);
   const [eigenSparing, setEigenSparing] = useState(500000);
   const [mndSparing, setMndSparing] = useState(3000);
   const [forventetAvk, setForventetAvk] = useState(6);
 
-  const G = 124028; // Grunnbeløpet 2025
+  const G = 124028;
+  const forventetLevealder = kjonn === "mann" ? 83 : 86;
   const arTilPensjon = Math.max(0, pensjonsalder - alder);
-  const onsketPensjon = inntekt * (onsketPct / 100);
-  const onsketPensjonMnd = onsketPensjon / 12;
 
-  // Folketrygd (forenklet ny modell — opptjening 18.1% av inntekt opp til 7.1G)
-  const pensjonsgivende = Math.min(inntekt, 7.1 * G);
-  const arligOpptjening = pensjonsgivende * 0.181;
-  // Total opptjening: antall år i arbeid (antar fra 25 til pensjonsalder)
-  const arbeidsaar = Math.max(0, pensjonsalder - 25);
-  const totalPensjonsBeholdning = arligOpptjening * arbeidsaar;
-  // Utbetaling: delt på forventet utbetalingsår (delingstall, ca 17-20 avh. av årskull)
-  const delingstall = pensjonsalder <= 62 ? 21 : pensjonsalder <= 67 ? 17.5 : pensjonsalder <= 70 ? 15.5 : 14;
-  const folketrygdArlig = totalPensjonsBeholdning / delingstall;
-  const folketrygdMnd = folketrygdArlig / 12;
+  // Tjenestepensjon: x% opp til 7.1G, høyere sats 7.1G-12G, ingenting over 12G
+  const grense71G = 7.1 * G; // ~880 399
+  const grense12G = 12 * G;  // ~1 488 336
+  const tpInntektLav = Math.min(inntekt, grense71G);
+  const tpInntektHoy = Math.max(0, Math.min(inntekt, grense12G) - grense71G);
+  const arligTpInnskudd = tpInntektLav * (tpSatsLav / 100) + tpInntektHoy * (tpSatsHoy / 100);
 
-  // Tjenestepensjon (innskuddspensjon)
-  const arligTpInnskudd = inntekt * (tpSats / 100);
+  // FV av TP
   const tpAvk = forventetAvk / 100;
-  // FV av nåværende saldo + fremtidige innskudd
   let tpSluttverdi = tpSaldo;
-  for (let y = 0; y < arTilPensjon; y++) {
-    tpSluttverdi = tpSluttverdi * (1 + tpAvk) + arligTpInnskudd;
-  }
-  // Utbetaling over ~15 år
-  const tpUtbetalingsaar = 15;
+  for (let y = 0; y < arTilPensjon; y++) { tpSluttverdi = tpSluttverdi * (1 + tpAvk) + arligTpInnskudd; }
+
+  // Innskuddspensjon: min 10 år, min til 77 år
+  const tpUtbetalingsaar = Math.max(10, 77 - pensjonsalder);
   const tpArlig = tpSluttverdi / tpUtbetalingsaar;
   const tpMnd = tpArlig / 12;
 
-  // Egen sparing (ASK/fond)
+  // Folketrygd (forenklet ny modell)
+  const pensjonsgivende = Math.min(inntekt, grense71G);
+  const arligOpptjening = pensjonsgivende * 0.181;
+  const arbeidsaar = Math.max(0, pensjonsalder - 25);
+  const totalPensBeholdning = arligOpptjening * arbeidsaar;
+  const delingstall = pensjonsalder <= 62 ? 21 : pensjonsalder <= 67 ? 17.5 : pensjonsalder <= 70 ? 15.5 : 14;
+  const folketrygdArlig = totalPensBeholdning / delingstall;
+  const folketrygdMnd = folketrygdArlig / 12;
+
+  // Egen sparing
   let eigenSluttverdi = eigenSparing;
-  for (let y = 0; y < arTilPensjon; y++) {
-    eigenSluttverdi = eigenSluttverdi * (1 + tpAvk) + mndSparing * 12;
-  }
-  const eigenUtbetalingsaar = 20;
+  for (let y = 0; y < arTilPensjon; y++) { eigenSluttverdi = eigenSluttverdi * (1 + tpAvk) + mndSparing * 12; }
+  const eigenUtbetalingsaar = Math.max(10, forventetLevealder - pensjonsalder);
   const eigenArlig = eigenSluttverdi / eigenUtbetalingsaar;
   const eigenMnd = eigenArlig / 12;
 
-  // Totalt
-  const totalPensjonMnd = folketrygdMnd + tpMnd + eigenMnd;
-  const totalPensjonArlig = totalPensjonMnd * 12;
-  const gap = onsketPensjon - totalPensjonArlig;
+  const onsketPensjon = inntekt * (onsketPct / 100);
+  const onsketMnd = onsketPensjon / 12;
+  const totalMnd = folketrygdMnd + tpMnd + eigenMnd;
+  const totalArlig = totalMnd * 12;
+  const gap = onsketPensjon - totalArlig;
   const gapMnd = gap / 12;
-  const dekningsgrad = onsketPensjon > 0 ? (totalPensjonArlig / onsketPensjon) * 100 : 0;
+  const dekningsgrad = onsketPensjon > 0 ? (totalArlig / onsketPensjon) * 100 : 0;
 
-  // Hva må du spare ekstra for å dekke gapet?
+  // Extra savings needed
   let ekstraMndSparing = 0;
   if (gap > 0 && arTilPensjon > 0) {
-    const behov = gap * eigenUtbetalingsaar; // total kapital needed
-    const manglerKapital = Math.max(0, behov - eigenSluttverdi);
-    // PMT formula: manglerKapital = PMT * ((1+r)^n - 1) / r
+    const behov = gap * eigenUtbetalingsaar;
     const r = tpAvk / 12;
     const n = arTilPensjon * 12;
-    if (r > 0) {
-      ekstraMndSparing = manglerKapital * r / (Math.pow(1 + r, n) - 1);
-    } else {
-      ekstraMndSparing = manglerKapital / n;
-    }
+    ekstraMndSparing = r > 0 ? behov * r / (Math.pow(1 + r, n) - 1) : behov / n;
   }
 
-  // Chart data: stacked sources
+  // Timeline chart: pension income by age
+  const pensjonAar = forventetLevealder - pensjonsalder;
+  const timeline = [];
+  for (let y = 0; y <= pensjonAar; y++) {
+    const a = pensjonsalder + y;
+    const ft = folketrygdArlig; // folketrygd is lifelong
+    const tp = y < tpUtbetalingsaar ? tpArlig : 0; // TP stops after utbetalingsaar
+    const eg = y < eigenUtbetalingsaar ? eigenArlig : 0;
+    timeline.push({ age: a, total: ft + tp + eg, ft, tp, eg });
+  }
+
   const sources = [
     { name: "Folketrygd", value: folketrygdMnd, color: T.accent },
     { name: "Tjenestepensjon", value: tpMnd, color: T.green },
     { name: "Egen sparing", value: eigenMnd, color: T.teal },
   ];
-
-  const barMax = Math.max(onsketPensjonMnd, totalPensjonMnd);
+  const barMax = Math.max(onsketMnd, totalMnd);
 
   return (<div>
     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
       <div><SL>Din situasjon</SL>
+        <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
+          {["mann", "kvinne"].map(k => (
+            <button key={k} onClick={() => setKjonn(k)} style={{ flex: 1, padding: "8px", border: `1px solid ${kjonn === k ? T.accent : T.border}`, borderRadius: 8, background: kjonn === k ? T.accentGlow : "transparent", color: kjonn === k ? T.accent : T.textSec, cursor: "pointer", fontSize: 12, fontWeight: 600, textTransform: "capitalize" }}>{k} ({k === "mann" ? "83 år" : "86 år"})</button>))}
+        </div>
         <Slider label="Alder" value={alder} onChange={setAlder} min={20} max={65} suffix=" år" decimals={0} />
         <Slider label="Årsinntekt (brutto)" value={inntekt} onChange={setInntekt} min={200000} max={3000000} step={25000} format={v => fmtKr(v)} />
         <Slider label="Ønsket pensjonsnivå" value={onsketPct} onChange={setOnsketPct} min={30} max={100} suffix=" % av lønn" decimals={0} />
         <Slider label="Pensjonsalder" value={pensjonsalder} onChange={setPensjonsalder} min={62} max={75} suffix=" år" decimals={0} />
 
         <div style={{ padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}`, marginTop: 8, marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: T.green, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Tjenestepensjon</div>
-          <Slider label="Sparesats fra arbeidsgiver" value={tpSats} onChange={setTpSats} min={0} max={7} step={0.5} suffix=" %" />
+          <div style={{ fontSize: 11, color: T.green, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 10 }}>Tjenestepensjon (innskudd)</div>
+          <Slider label={`Sparesats opp til 7,1G (${fmtKr(grense71G)})`} value={tpSatsLav} onChange={setTpSatsLav} min={0} max={7} step={0.5} suffix=" %" />
+          <Slider label={`Sparesats 7,1G–12G (${fmtKr(grense12G)})`} value={tpSatsHoy} onChange={setTpSatsHoy} min={0} max={25} step={0.5} suffix=" %" />
           <Slider label="Nåværende saldo" value={tpSaldo} onChange={setTpSaldo} min={0} max={5000000} step={50000} format={v => fmtKr(v)} />
+          <div style={{ fontSize: 11, color: T.textTer }}>Årlig innskudd: {fmtKr(arligTpInnskudd)} · Utbetaling: min {tpUtbetalingsaar} år (til {pensjonsalder + tpUtbetalingsaar} år)</div>
         </div>
 
         <div style={{ padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
@@ -1174,229 +1237,84 @@ function PensjonGap() {
       </div>
 
       <div><SL>Pensjonsprognose</SL>
-        {/* Hero */}
-        <div style={{ background: gap <= 0 ? T.greenGlow : T.redGlow, border: `1px solid ${gap <= 0 ? "rgba(48,209,88,0.15)" : "rgba(255,69,58,0.15)"}`, borderRadius: 16, padding: 20, marginBottom: 16, textAlign: "center" }}>
+        <div style={{ background: gap <= 0 ? T.greenGlow : T.redGlow, border: `1px solid ${gap <= 0 ? "rgba(52,211,153,0.15)" : "rgba(248,113,113,0.15)"}`, borderRadius: 16, padding: 20, marginBottom: 16, textAlign: "center" }}>
           <div style={{ fontSize: 13, color: T.textSec }}>Dekningsgrad</div>
           <div style={{ fontSize: 48, fontWeight: 800, color: gap <= 0 ? T.green : dekningsgrad >= 80 ? T.orange : T.red, lineHeight: 1.1, marginTop: 4 }}>{fmtPct(dekningsgrad, 0)}</div>
           <div style={{ fontSize: 14, color: T.textSec, marginTop: 6 }}>
-            {gap <= 0 ? "✓ Du er i mål!" : `Gap: ${fmtKr(Math.abs(gapMnd))}/mnd — du trenger ${fmtKr(ekstraMndSparing)}/mnd ekstra sparing`}
+            {gap <= 0 ? "✓ Du er i mål!" : `Gap: ${fmtKr(Math.abs(gapMnd))}/mnd — trenger ${fmtKr(ekstraMndSparing)}/mnd ekstra`}
           </div>
         </div>
 
-        {/* Monthly breakdown */}
         <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
-          <StatBox label="Ønsket pensjon" value={fmtKr(onsketPensjonMnd)} color={T.text} sub={`${fmtKr(onsketPensjon)}/år`} />
-          <StatBox label="Forventet pensjon" value={fmtKr(totalPensjonMnd)} color={gap <= 0 ? T.green : T.orange} sub={`${fmtKr(totalPensjonArlig)}/år`} />
-          <StatBox label={gap > 0 ? "Månedlig gap" : "Overskudd"} value={fmtKr(Math.abs(gapMnd))} color={gap > 0 ? T.red : T.green} sub="/mnd" />
+          <StatBox label="Ønsket pensjon" value={`${fmtKr(onsketMnd)}/mnd`} color={T.text} sub={`${fmtKr(onsketPensjon)}/år`} />
+          <StatBox label="Forventet pensjon" value={`${fmtKr(totalMnd)}/mnd`} color={gap <= 0 ? T.green : T.orange} sub={`${fmtKr(totalArlig)}/år`} />
+          <StatBox label={gap > 0 ? "Månedlig gap" : "Overskudd"} value={`${fmtKr(Math.abs(gapMnd))}/mnd`} color={gap > 0 ? T.red : T.green} />
         </div>
 
-        {/* Visual stacked bar comparison */}
+        {/* Stacked bar */}
         <CB label="Månedlig pensjon — sammensetning" style={{ marginBottom: 14 }}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: T.textTer, marginBottom: 6 }}>Din pensjon ({fmtKr(totalPensjonMnd)}/mnd)</div>
-            <div style={{ height: 32, borderRadius: 8, overflow: "hidden", display: "flex", background: "rgba(255,255,255,0.04)" }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 11, color: T.textTer, marginBottom: 4 }}>Din pensjon ({fmtKr(totalMnd)}/mnd)</div>
+            <div style={{ height: 28, borderRadius: 8, overflow: "hidden", display: "flex", background: "rgba(255,255,255,0.04)" }}>
               {sources.filter(s => s.value > 0).map(s => (
                 <div key={s.name} style={{ width: `${(s.value / barMax) * 100}%`, background: s.color, display: "flex", alignItems: "center", justifyContent: "center", minWidth: s.value / barMax > 0.12 ? "auto" : 0, transition: "width 0.3s" }}>
                   {s.value / barMax > 0.12 && <span style={{ fontSize: 10, fontWeight: 600, color: "#fff", whiteSpace: "nowrap" }}>{fmtKr(s.value)}</span>}
                 </div>
               ))}
             </div>
-          </div>
-          <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 11, color: T.textTer, marginBottom: 6 }}>Ønsket nivå ({fmtKr(onsketPensjonMnd)}/mnd)</div>
-            <div style={{ height: 32, borderRadius: 8, overflow: "hidden", background: "rgba(255,255,255,0.08)", position: "relative" }}>
-              <div style={{ height: "100%", width: `${(onsketPensjonMnd / barMax) * 100}%`, background: "rgba(255,255,255,0.06)", border: `1px dashed ${T.textTer}`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 10, color: T.textTer }}>{onsketPct}% av lønn</span>
-              </div>
+            <div style={{ display: "flex", gap: 14, marginTop: 6 }}>
+              {sources.map(s => (<div key={s.name} style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 3, background: s.color }} /><span style={{ fontSize: 11, color: T.textSec }}>{s.name}: {fmtKr(s.value)}/mnd</span></div>))}
             </div>
-          </div>
-          <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
-            {sources.map(s => (
-              <div key={s.name} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <div style={{ width: 10, height: 10, borderRadius: 3, background: s.color }} />
-                <span style={{ fontSize: 11, color: T.textSec }}>{s.name}: {fmtKr(s.value)}/mnd</span>
-              </div>
-            ))}
           </div>
         </CB>
 
-        {/* Detail boxes */}
+        {/* Timeline chart */}
+        <CB label={`Pensjonsinntekt fra ${pensjonsalder} til ${forventetLevealder} år`} style={{ marginBottom: 14 }}>
+          <IChart data={timeline.map(t => t.total / 12)} color={T.green} title="" yFormat={v => `${fmtKr(v)}/mnd`} xFormat={i => `${pensjonsalder + i} år`} height={110} />
+          <div style={{ fontSize: 11, color: T.textTer, marginTop: 6 }}>
+            OBS: Tjenestepensjon stopper ved {pensjonsalder + tpUtbetalingsaar} år. Egen sparing stopper ved {pensjonsalder + eigenUtbetalingsaar} år. Folketrygd er livsvarig.
+          </div>
+        </CB>
+
+        {/* Details */}
         <CB label="Detaljer">
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "6px 0", borderBottom: `1px solid ${T.border}` }}>
-              <span style={{ color: T.textSec }}>Folketrygd (estimat)</span>
+              <span style={{ color: T.textSec }}>Folketrygd (estimat, livsvarig)</span>
               <span style={{ color: T.accent, fontWeight: 600 }}>{fmtKr(folketrygdMnd)}/mnd</span>
             </div>
-            <div style={{ fontSize: 11, color: T.textTer, marginTop: -4, marginBottom: 4 }}>Basert på {arbeidsaar} års opptjening, inntekt opp til 7,1G ({fmtKr(7.1 * G)}), delingstall {delingstall}</div>
+            <div style={{ fontSize: 11, color: T.textTer, marginBottom: 4 }}>{arbeidsaar} år opptjening · Opp til 7,1G ({fmtKr(grense71G)}) · Delingstall {delingstall}</div>
 
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "6px 0", borderBottom: `1px solid ${T.border}` }}>
-              <span style={{ color: T.textSec }}>Tjenestepensjon (innskudd)</span>
+              <span style={{ color: T.textSec }}>Tjenestepensjon ({tpUtbetalingsaar} år)</span>
               <span style={{ color: T.green, fontWeight: 600 }}>{fmtKr(tpMnd)}/mnd</span>
             </div>
-            <div style={{ fontSize: 11, color: T.textTer, marginTop: -4, marginBottom: 4 }}>Saldo ved {pensjonsalder}: {fmtKr(tpSluttverdi)}, utbetalt over {tpUtbetalingsaar} år. Sparesats {tpSats}% = {fmtKr(arligTpInnskudd)}/år.</div>
+            <div style={{ fontSize: 11, color: T.textTer, marginBottom: 4 }}>Saldo ved {pensjonsalder}: {fmtKr(tpSluttverdi)} · Årlig innskudd: {fmtKr(arligTpInnskudd)} · Min 10 år / til 77 år</div>
 
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "6px 0", borderBottom: `1px solid ${T.border}` }}>
-              <span style={{ color: T.textSec }}>Egen sparing</span>
+              <span style={{ color: T.textSec }}>Egen sparing ({eigenUtbetalingsaar} år)</span>
               <span style={{ color: T.teal, fontWeight: 600 }}>{fmtKr(eigenMnd)}/mnd</span>
             </div>
-            <div style={{ fontSize: 11, color: T.textTer, marginTop: -4 }}>Verdi ved {pensjonsalder}: {fmtKr(eigenSluttverdi)}, utbetalt over {eigenUtbetalingsaar} år. {arTilPensjon} år med {fmtKr(mndSparing)}/mnd sparing.</div>
+            <div style={{ fontSize: 11, color: T.textTer }}>Verdi ved {pensjonsalder}: {fmtKr(eigenSluttverdi)} · {arTilPensjon} år × {fmtKr(mndSparing)}/mnd</div>
           </div>
         </CB>
 
         {gap > 0 && (
-          <div style={{ marginTop: 14, padding: 16, background: "rgba(255,69,58,0.04)", borderRadius: 14, border: "1px solid rgba(255,69,58,0.1)" }}>
+          <div style={{ marginTop: 14, padding: 16, background: "rgba(248,113,113,0.04)", borderRadius: 14, border: "1px solid rgba(248,113,113,0.1)" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 6 }}>Slik lukker du gapet</div>
             <div style={{ fontSize: 12, color: T.textSec, lineHeight: 1.7 }}>
-              Du mangler <strong style={{ color: T.red }}>{fmtKr(gapMnd)}/mnd</strong> i pensjon. For å dekke dette trenger du å spare <strong style={{ color: T.orange }}>{fmtKr(ekstraMndSparing)}/mnd</strong> ekstra i {arTilPensjon} år (med {forventetAvk}% avkastning). Alternativt kan du utsette pensjonsalderen — hvert ekstra år øker folketrygden og gir mer tid til sparing.
+              Du mangler <strong style={{ color: T.red }}>{fmtKr(gapMnd)}/mnd</strong> i pensjon. Spar <strong style={{ color: T.orange }}>{fmtKr(ekstraMndSparing)}/mnd</strong> ekstra i {arTilPensjon} år ({fmtPct(forventetAvk)} avk.). Eller utsett pensjonsalderen — hvert ekstra år øker folketrygden og gir mer sparetid.
             </div>
           </div>
         )}
       </div>
     </div>
     <div style={{ marginTop: 18, padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}><strong style={{ color: T.textSec }}>Forenklinger:</strong> Folketrygd er estimert etter ny opptjeningsmodell (18,1% av inntekt opp til 7,1G). Faktisk beløp avhenger av full inntektshistorikk — sjekk <strong>norskpensjon.no</strong> for presise tall. Tjenestepensjon antar innskuddsordning. Skatteeffekter på utbetaling er ikke inkludert. Beregningen er ment som illustrasjon, ikke nøyaktig prognose.</div>
+      <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}><strong style={{ color: T.textSec }}>Forenklinger:</strong> Folketrygd estimert etter ny opptjeningsmodell (18,1% av inntekt opp til 7,1G). Tjenestepensjon: innskuddsordning med x% opp til 7,1G og y% fra 7,1G til 12G (maks). Utbetaling minimum 10 år og til minst 77 år. Forventet levealder: menn {kjonn === "mann" ? forventetLevealder : "83"} år, kvinner {kjonn === "kvinne" ? forventetLevealder : "86"} år (SSB). Sjekk <strong>norskpensjon.no</strong> for presise tall.</div>
     </div>
   </div>);
 }
 
-// ══════════════════════════════════════
-// TOOL 9: ASK vs Fondskonto vs Holding
-// ══════════════════════════════════════
-function StrukturSammenligner() {
-  const [belop, setBelop] = useState(5000000);
-  const [horisont, setHorisont] = useState(20);
-  const [avk, setAvk] = useState(7);
-  const [uttakPct, setUttakPct] = useState(100); // % tatt ut til privat ved slutt
-
-  const beregn = (type) => {
-    let bal = belop;
-    let totalSkatt = 0;
-    const data = [bal];
-
-    for (let y = 1; y <= horisont; y++) {
-      const avkastning = bal * (avk / 100);
-
-      if (type === "ask") {
-        // ASK: ingen skatt underveis, kun formuesskatt
-        bal += avkastning;
-        const formue = Math.max(0, bal * 0.80 - FORMUE_BUNN); // 20% rabatt
-        const fSkatt = formue * FORMUE_S1;
-        totalSkatt += fSkatt;
-        bal -= fSkatt;
-      } else if (type === "fondskonto") {
-        // Fondskonto: ingen skatt underveis (realisasjonsprinsipp), formuesskatt
-        bal += avkastning;
-        const formue = Math.max(0, bal * 0.80 - FORMUE_BUNN);
-        const fSkatt = formue * FORMUE_S1;
-        totalSkatt += fSkatt;
-        bal -= fSkatt;
-      } else if (type === "holding") {
-        // Holding: 0% på aksjegevinst (fritaksmetode), 22% selskapsskatt på renter (antar 100% aksjer = 0% løpende)
-        bal += avkastning;
-        // Formuesskatt: 75% verdsettelse for ikke-børsnotert + 20% aksjerabatt inni
-        const formue = Math.max(0, bal * 0.75 * 0.80 - FORMUE_BUNN);
-        const fSkatt = formue * FORMUE_S1;
-        totalSkatt += fSkatt;
-        bal -= fSkatt;
-      }
-      data.push(bal);
-    }
-
-    // Uttak til privat
-    const uttakBelop = bal * (uttakPct / 100);
-    const gevinst = uttakBelop - belop * (uttakPct / 100);
-    let uttakSkatt = 0;
-
-    if (type === "ask") {
-      // Skjermingsfradrag: kostpris * skjermingsrente * antall år (forenklet)
-      const skjerming = belop * SKJERMINGSRENTE * horisont;
-      const skattbarGevinst = Math.max(0, gevinst - skjerming);
-      uttakSkatt = skattbarGevinst * EFF_SKATT;
-    } else if (type === "fondskonto") {
-      // Samme som ASK men ingen skjermingsfradrag
-      uttakSkatt = Math.max(0, gevinst) * EFF_SKATT;
-    } else if (type === "holding") {
-      // Utbytte fra holding: 22% selskapsskatt (allerede 0% pga fritaksmetode) + utbytteskatt til privat
-      // Utbytte = gevinst, beskattes med oppjustert sats
-      uttakSkatt = Math.max(0, gevinst) * EFF_SKATT;
-    }
-
-    totalSkatt += uttakSkatt;
-    const nettoUttak = uttakBelop - uttakSkatt;
-
-    return { bal, data, totalSkatt, uttakSkatt, nettoUttak, gevinst };
-  };
-
-  const ask = useMemo(() => beregn("ask"), [belop, horisont, avk, uttakPct]);
-  const fk = useMemo(() => beregn("fondskonto"), [belop, horisont, avk, uttakPct]);
-  const hold = useMemo(() => beregn("holding"), [belop, horisont, avk, uttakPct]);
-
-  const best = ask.nettoUttak >= fk.nettoUttak && ask.nettoUttak >= hold.nettoUttak ? "ASK" : hold.nettoUttak >= fk.nettoUttak ? "Holding" : "Fondskonto";
-
-  const structures = [
-    { name: "ASK", data: ask, color: T.accent, icon: "🏦" },
-    { name: "Fondskonto", data: fk, color: T.orange, icon: "📁" },
-    { name: "Holdingselskap", data: hold, color: T.purple, icon: "🏢" },
-  ];
-
-  return (<div>
-    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
-      <div><SL>Parametere</SL>
-        <Slider label="Investeringsbeløp" value={belop} onChange={setBelop} min={500000} max={50000000} step={250000} format={v => fmtKr(v)} />
-        <Slider label="Tidshorisont" value={horisont} onChange={setHorisont} min={1} max={40} suffix=" år" decimals={0} />
-        <Slider label="Forventet avkastning" value={avk} onChange={setAvk} min={2} max={12} step={0.25} suffix=" %" />
-        <Slider label="Andel tatt ut til privat" value={uttakPct} onChange={setUttakPct} min={0} max={100} suffix=" %" decimals={0} />
-
-        <div style={{ marginTop: 12, padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 8 }}>Forutsetninger</div>
-          <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}>
-            100% aksjefond i alle strukturer. ASK har skjermingsfradrag ({fmtPct(SKJERMINGSRENTE * 100)}). Holding bruker fritaksmetoden (0% løpende skatt på aksjegevinst). Formuesskatt inkludert med ulike verdsettelsesrabatter.
-          </div>
-        </div>
-      </div>
-
-      <div><SL>Sammenligning</SL>
-        <div style={{ background: T.accentGlow, border: `1px solid rgba(41,151,255,0.15)`, borderRadius: 16, padding: 16, marginBottom: 16, textAlign: "center" }}>
-          <div style={{ fontSize: 13, color: T.textSec }}>Beste struktur</div>
-          <div style={{ fontSize: 28, fontWeight: 800, color: T.accent, marginTop: 4 }}>{best}</div>
-          <div style={{ fontSize: 12, color: T.textSec, marginTop: 4 }}>Høyest netto utbetaling etter skatt</div>
-        </div>
-
-        {/* Comparison cards */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {structures.sort((a, b) => b.data.nettoUttak - a.data.nettoUttak).map((s, i) => (
-            <div key={s.name} style={{ padding: "14px 16px", borderRadius: 12, border: `1px solid ${i === 0 ? s.color + "40" : T.border}`, background: i === 0 ? s.color + "08" : T.surfaceAlt }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: s.color }}>{s.icon} {s.name} {i === 0 && "★"}</span>
-                <span style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{fmtKr(s.data.nettoUttak)}</span>
-              </div>
-              <div style={{ display: "flex", gap: 16, fontSize: 11, color: T.textTer }}>
-                <span>Brutto: {fmtKr(s.data.bal)}</span>
-                <span>Total skatt: <span style={{ color: T.red }}>{fmtKr(s.data.totalSkatt)}</span></span>
-                <span>Eff. skatt: {fmtPct(s.data.bal > 0 ? s.data.totalSkatt / (s.data.bal - belop) * 100 : 0)}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Difference */}
-        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
-          <StatBox label="ASK vs Fondskonto" value={`+${fmtKr(ask.nettoUttak - fk.nettoUttak)}`} color={ask.nettoUttak > fk.nettoUttak ? T.green : T.red} sub="Fordel ASK (skjermingsfradrag)" />
-          <StatBox label="Holding vs ASK" value={`${hold.nettoUttak > ask.nettoUttak ? "+" : ""}${fmtKr(hold.nettoUttak - ask.nettoUttak)}`} color={hold.nettoUttak > ask.nettoUttak ? T.green : T.red} sub="Formuesskattrabatt" />
-        </div>
-
-        <CB label="Verdiutvikling (brutto, før uttaksskatt)">
-          <MultiLineChart datasets={structures.map(s => ({ data: s.data.data, color: s.color, label: s.name }))} labels height={110} />
-        </CB>
-      </div>
-    </div>
-    <div style={{ marginTop: 18, padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}><strong style={{ color: T.textSec }}>Forenklet modell:</strong> ASK: skjermingsfradrag akkumuleres, 37,84% eff. skatt på gevinst ved uttak, 20% verdsettelsesrabatt. Fondskonto: samme skatt men uten skjermingsfradrag. Holding: fritaksmetode (0% løpende), men utbytteskatt ved uttak til privat (37,84%). Holding har bedre formuesskattrabatt (75% verdsettelse × 20% aksjerabatt = 60% rabatt). Kostnader ved drift av holding er ikke inkludert (~20-50k/år).</div>
-    </div>
-  </div>);
-}
-
-// ══════════════════════════════════════
 // TOOL 10: Inflasjon & 72-regelen
 // ══════════════════════════════════════
 function TidOgPenger() {
@@ -1468,36 +1386,79 @@ function TidOgPenger() {
 }
 
 // ══ Main ══
-const tools = [
-  { id: "compound", label: "Rentes rente", icon: "📈" },
-  { id: "wealth", label: "Wealth Planner", icon: "🏦" },
-  { id: "feeimpact", label: "Kostnadseffekt", icon: "💸" },
-  { id: "pension", label: "Pensjonsgap", icon: "👴" },
-  { id: "struktur", label: "ASK vs Holding", icon: "⚖️" },
-  { id: "rebalance", label: "Rebalansering", icon: "🔄" },
-  { id: "tidpenger", label: "Tid & penger", icon: "⏳" },
-  { id: "fire", label: "FIRE", icon: "🔥" },
-  { id: "loan", label: "Lånekalkulator", icon: "🏠" },
-  { id: "market", label: "Markedspuls", icon: "🌍" },
+const toolGroups = [
+  { label: "Sparing", tools: [
+    { id: "compound", label: "Rentes rente", icon: "📈" },
+    { id: "feeimpact", label: "Kostnadseffekt", icon: "💸" },
+    { id: "tidpenger", label: "Tid & penger", icon: "⏳" },
+  ]},
+  { label: "Planlegging", tools: [
+    { id: "wealth", label: "Wealth Planner", icon: "🏦" },
+    { id: "pension", label: "Pensjonsgap", icon: "👴" },
+    { id: "fire", label: "FIRE", icon: "🔥" },
+  ]},
+  { label: "Verktøy", tools: [
+    { id: "rebalance", label: "Rebalansering", icon: "🔄" },
+    { id: "loan", label: "Lånekalkulator", icon: "🏠" },
+    { id: "market", label: "Markedspuls", icon: "🌍" },
+  ]},
 ];
+
+const allTools = toolGroups.flatMap(g => g.tools);
 
 export default function App() {
   const [active, setActive] = useState("compound");
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-  const render = () => { switch (active) { case "compound": return <CompoundCalc />; case "wealth": return <WealthPlanner />; case "feeimpact": return <FeeImpact />; case "pension": return <PensjonGap />; case "struktur": return <StrukturSammenligner />; case "rebalance": return <Rebalancer />; case "tidpenger": return <TidOgPenger />; case "fire": return <FIRE />; case "loan": return <Loan />; case "market": return <MarketPulse />; default: return null; } };
+  const render = () => { switch (active) { case "compound": return <CompoundCalc />; case "wealth": return <WealthPlanner />; case "feeimpact": return <FeeImpact />; case "pension": return <PensjonGap />; case "rebalance": return <Rebalancer />; case "tidpenger": return <TidOgPenger />; case "fire": return <FIRE />; case "loan": return <Loan />; case "market": return <MarketPulse />; default: return null; } };
 
   return (<div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'SF Pro Display',-apple-system,'Helvetica Neue',sans-serif", opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease" }}>
     <style>{MOBILE_CSS}</style>
-    <div className="main-padding" style={{ padding: "28px 36px 0", maxWidth: 1120, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.55) 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Finansverktøy</h1>
-        <span style={{ fontSize: 12, color: T.textTer, letterSpacing: "0.05em", textTransform: "uppercase" }}>Private Banking</span></div>
-      <p style={{ fontSize: 14, color: T.textSec, marginBottom: 24, lineHeight: 1.5 }}>Kalkulatorer og analyseverktøy med norske skatteregler</p></div>
-    <div className="content-padding" style={{ maxWidth: 1120, margin: "0 auto", padding: "0 36px" }}>
-      <div className="tab-bar" style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 3, borderBottom: `1px solid ${T.border}`, marginBottom: 24, WebkitOverflowScrolling: "touch" }}>
-        {tools.map(t => <button key={t.id} onClick={() => setActive(t.id)} style={{ padding: "9px 16px", border: "none", borderRadius: "9px 9px 0 0", cursor: "pointer", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", transition: "all 0.2s", background: active === t.id ? "rgba(255,255,255,0.05)" : "transparent", color: active === t.id ? T.text : T.textTer, borderBottom: active === t.id ? `2px solid ${T.accent}` : "2px solid transparent" }}>{t.icon} {t.label}</button>)}</div></div>
-    <div className="bottom-padding" style={{ maxWidth: 1120, margin: "0 auto", padding: "0 36px 50px" }}>
+
+    {/* Header */}
+    <div className="main-padding" style={{ padding: "32px 40px 0", maxWidth: 1120, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: "-0.02em", color: T.text, margin: 0 }}>Finansverktøy</h1>
+          <p style={{ fontSize: 13, color: T.textTer, margin: "4px 0 0", letterSpacing: "0.01em" }}>Kalkulatorer med norske skatteregler</p>
+        </div>
+      </div>
+    </div>
+
+    {/* Navigation — grouped */}
+    <div className="content-padding" style={{ maxWidth: 1120, margin: "0 auto", padding: "0 40px" }}>
+      <div style={{ display: "flex", gap: 20, marginBottom: 28, flexWrap: "wrap" }}>
+        {toolGroups.map(group => (
+          <div key={group.label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: 10, color: T.textTer, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, paddingLeft: 4, marginBottom: 2 }}>{group.label}</div>
+            <div style={{ display: "flex", gap: 3 }}>
+              {group.tools.map(t => {
+                const isActive = active === t.id;
+                return (
+                  <button key={t.id} onClick={() => setActive(t.id)} style={{
+                    padding: "7px 14px", border: "none", borderRadius: 10, cursor: "pointer",
+                    fontSize: 12.5, fontWeight: isActive ? 600 : 450, whiteSpace: "nowrap",
+                    transition: "all 0.2s ease",
+                    background: isActive ? "rgba(77,163,255,0.12)" : T.surfaceAlt,
+                    color: isActive ? T.accent : T.textSec,
+                    boxShadow: isActive ? "0 0 0 1px rgba(77,163,255,0.25)" : "0 0 0 1px transparent",
+                  }}>
+                    <span style={{ marginRight: 4 }}>{t.icon}</span>{t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    {/* Content */}
+    <div className="bottom-padding" style={{ maxWidth: 1120, margin: "0 auto", padding: "0 40px 50px" }}>
       <Card className="card-padding" glow={T.accentGlow}>{render()}</Card>
-      <div style={{ marginTop: 20, textAlign: "center", fontSize: 11.5, color: T.textTer }}>Verktøyene er ment som veiledning og erstatter ikke profesjonell rådgivning.</div></div></div>);
+      <div style={{ marginTop: 24, textAlign: "center", fontSize: 11, color: T.textTer }}>
+        Verktøyene er ment som veiledning og erstatter ikke profesjonell rådgivning. Skatteregler er forenklet.
+      </div>
+    </div>
+  </div>);
 }
