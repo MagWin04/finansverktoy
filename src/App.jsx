@@ -1,5 +1,22 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 
+const MOBILE_CSS = `
+  @media (max-width: 768px) {
+    .responsive-grid { grid-template-columns: 1fr !important; }
+    .stat-grid-2 { grid-template-columns: 1fr 1fr !important; }
+    .main-padding { padding: 16px 16px 0 !important; }
+    .content-padding { padding: 0 16px !important; }
+    .bottom-padding { padding: 0 16px 30px !important; }
+    .card-padding { padding: 18px !important; }
+    .tab-bar { gap: 2px !important; }
+    .tab-bar button { padding: 8px 10px !important; font-size: 12px !important; }
+    .profile-buttons { flex-wrap: wrap !important; }
+  }
+  @media (max-width: 480px) {
+    .stat-grid-2 { grid-template-columns: 1fr !important; }
+  }
+`;
+
 const fmt = (n, d = 0) => new Intl.NumberFormat("nb-NO", { minimumFractionDigits: d, maximumFractionDigits: d }).format(n);
 const fmtKr = (n) => `${fmt(n)} kr`;
 const fmtPct = (n, d = 1) => `${fmt(n, d)} %`;
@@ -42,7 +59,7 @@ function Slider({ label, value, onChange, min, max, step = 1, suffix = "", prefi
 }
 
 function Toggle({ label, value, onChange }) { return (<label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 13, color: T.textSec }}><div onClick={() => onChange(!value)} style={{ width: 42, height: 24, borderRadius: 12, position: "relative", cursor: "pointer", background: value ? T.accent : "rgba(255,255,255,0.12)", transition: "background 0.2s" }}><div style={{ width: 20, height: 20, borderRadius: 10, background: "#fff", position: "absolute", top: 2, left: value ? 20 : 2, transition: "left 0.2s", boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }} /></div>{label}</label>); }
-function Card({ children, style, glow }) { return (<div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, position: "relative", overflow: "hidden", ...style }}>{glow && <div style={{ position: "absolute", top: -80, right: -80, width: 200, height: 200, background: glow, borderRadius: "50%", filter: "blur(80px)", opacity: 0.35, pointerEvents: "none" }} />}<div style={{ position: "relative", zIndex: 1 }}>{children}</div></div>); }
+function Card({ children, style, glow, className }) { return (<div className={className} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 20, padding: 28, position: "relative", overflow: "hidden", ...style }}>{glow && <div style={{ position: "absolute", top: -80, right: -80, width: 200, height: 200, background: glow, borderRadius: "50%", filter: "blur(80px)", opacity: 0.35, pointerEvents: "none" }} />}<div style={{ position: "relative", zIndex: 1 }}>{children}</div></div>); }
 function StatBox({ label, value, color, sub }) { return (<div style={{ background: T.surfaceAlt, borderRadius: 14, padding: "14px 16px", border: `1px solid ${T.border}` }}><div style={{ fontSize: 11, color: T.textTer, marginBottom: 5, letterSpacing: "0.04em", textTransform: "uppercase" }}>{label}</div><div style={{ fontSize: 20, fontWeight: 700, color: color || T.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>{value}</div>{sub && <div style={{ fontSize: 11, color: T.textSec, marginTop: 4 }}>{sub}</div>}</div>); }
 function SL({ children }) { return <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16, color: T.text }}>{children}</h3>; }
 function CB({ label, children, style }) { return (<div style={{ background: T.surfaceAlt, borderRadius: 12, padding: 14, border: `1px solid ${T.border}`, ...style }}>{label && <div style={{ fontSize: 10.5, color: T.textTer, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>}{children}</div>); }
@@ -135,8 +152,8 @@ function MultiLineChart({ datasets, width = 360, height = 100, labels }) {
     {labels && <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap" }}>{datasets.map((d, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}><div style={{ width: 12, height: 3, borderRadius: 2, background: d.color }} /><span style={{ fontSize: 11, color: T.textSec }}>{d.label}</span></div>)}</div>}</div>);
 }
 
-function seededRandom(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; }
-function boxMuller(rng) { return Math.sqrt(-2 * Math.log(rng())) * Math.cos(2 * Math.PI * rng()); }
+function seededRandom(seed) { let s = seed; return () => { s = (s * 16807) % 2147483647; return Math.max(0.0001, s / 2147483647); }; }
+function boxMuller(rng) { const u1 = Math.max(0.0001, rng()); const u2 = rng(); return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); }
 
 // ══════════════════════════════════════
 // TOOL 1: Compound (no tax, ±1% bands)
@@ -170,7 +187,7 @@ function CompoundCalc() {
   }, [init, mth, rate, yrs, infl]);
 
   return (<div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
+    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
       <div><SL>Parametere</SL>
         <Slider label="Startbeløp" value={init} onChange={setInit} min={0} max={10000000} step={50000} format={v => fmtKr(v)} />
         <Slider label="Månedlig sparing" value={mth} onChange={setMth} min={0} max={100000} step={500} format={v => fmtKr(v)} />
@@ -179,7 +196,7 @@ function CompoundCalc() {
         <Slider label="Inflasjon" value={infl} onChange={setInfl} min={0} max={8} step={0.25} suffix=" %" />
       </div>
       <div><SL>Resultat</SL>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
           <StatBox label="Sluttverdi" value={fmtKr(r.final)} color={T.accent} />
           <StatBox label="Innbetalt" value={fmtKr(r.contrib)} color={T.textSec} />
           <StatBox label="Gevinst" value={fmtKr(r.gain)} color={T.green} sub={`${fmtPct((r.gain / r.contrib) * 100)} avkastning`} />
@@ -210,7 +227,7 @@ function WealthPlanner() {
   const [expense, setExpense] = useState(600000);
   const [infl, setInfl] = useState(2.5);
   const [wTax, setWTax] = useState(true);
-  const [riskP, setRiskP] = useState("moderat");
+  const [riskP, setRiskP] = useState("Moderat");
   const [showMC, setShowMC] = useState(true);
   const [isASK, setIsASK] = useState(true);
 
@@ -267,6 +284,7 @@ function WealthPlanner() {
         allB[0].push(sb);
         for (let y = 1; y <= maxY; y++) {
           const r = mu + volPct * boxMuller(rng);
+          if (!isFinite(r)) { allB[y].push(sb); continue; }
           scum += scb * SKJERMINGSRENTE;
           const swt = calcWT(sb);
           sb *= (1 + r);
@@ -282,18 +300,18 @@ function WealthPlanner() {
         }
         ends.push(sb);
       }
-      for (let y = 0; y <= maxY; y++) { const sorted = allB[y].slice().sort((a, b) => a - b); const p = v => sorted[Math.floor(v * sorted.length)]; pData.p10.push(p(0.1)); pData.p25.push(p(0.25)); pData.p50.push(p(0.5)); pData.p75.push(p(0.75)); pData.p90.push(p(0.9)); }
+      for (let y = 0; y <= maxY; y++) { const sorted = allB[y].filter(v => isFinite(v)).sort((a, b) => a - b); if (sorted.length === 0) { pData.p10.push(0); pData.p25.push(0); pData.p50.push(0); pData.p75.push(0); pData.p90.push(0); continue; } const p = v => sorted[Math.min(Math.floor(v * sorted.length), sorted.length - 1)]; pData.p10.push(p(0.1)); pData.p25.push(p(0.25)); pData.p50.push(p(0.5)); pData.p75.push(p(0.75)); pData.p90.push(p(0.9)); }
       survRate = ends.filter(v => v > 0).length / N * 100;
     }
     return { data, depYear, pData, survivalRate: survRate, maxY, totTax, totWT, cumSkj };
-  }, [port, costBasis, expense, expRet, infl, wTax, riskP, showMC, prof, isASK, volPct]);
+  }, [port, costBasis, expense, expRet, infl, wTax, riskP, showMC, isASK, volPct]);
 
   return (<div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
+    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
       <div><SL>Parametere</SL>
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 13, color: T.textSec, marginBottom: 8 }}>Risikoprofil</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+          <div className="profile-buttons" style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
             {Object.keys(profiles).map(k => (
               <button key={k} onClick={() => setRiskP(k)} style={{ padding: "8px 10px", border: `1px solid ${riskP === k ? T.accent : T.border}`, borderRadius: 8, background: riskP === k ? T.accentGlow : "transparent", color: riskP === k ? T.accent : T.textSec, cursor: "pointer", fontSize: 11, fontWeight: 600, transition: "all 0.2s" }}>{k}</button>))}
           </div>
@@ -316,7 +334,7 @@ function WealthPlanner() {
           <div style={{ fontSize: 13, color: T.textSec, marginBottom: 2 }}>Porteføljen varer i</div>
           <div style={{ fontSize: 34, fontWeight: 800, color: result.depYear ? T.red : T.green }}>{result.depYear ? `${result.depYear} år` : "60+ år"}</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
           <StatBox label="Uttaksrate" value={fmtPct((expense / port) * 100)} color={(expense / port) <= 0.04 ? T.green : T.orange} sub={(expense / port) <= 0.04 ? "Innenfor 4%-regelen" : "Over 4%-regelen"} />
           {showMC && result.survivalRate !== null ? (<StatBox label="Overlevelsesrate" value={fmtPct(result.survivalRate, 0)} color={result.survivalRate >= 90 ? T.green : result.survivalRate >= 70 ? T.orange : T.red} sub="Monte Carlo (500 sim.)" />) : (<StatBox label="Gevinst" value={fmtKr(port - costBasis)} color={T.green} />)}
           <StatBox label="Akkum. skjerming" value={fmtKr(result.cumSkj)} color={T.teal} sub={`${fmtPct(SKJERMINGSRENTE * 100)} · ${isASK ? "ASK" : "VPS"}`} />
@@ -358,7 +376,7 @@ function FeeImpact() {
   const r0 = useMemo(() => calc(0), [calc]); const r1 = useMemo(() => calc(f1), [calc, f1]); const r2 = useMemo(() => calc(f2), [calc, f2]); const r3 = useMemo(() => calc(f3), [calc, f3]);
   const sc = [{ l: "Ingen kostnad", r: r0, c: T.green }, { l: `${fmtPct(f1)} TER`, r: r1, c: T.accent }, { l: `${fmtPct(f2)} TER`, r: r2, c: T.orange }, { l: `${fmtPct(f3)} TER`, r: r3, c: T.red }];
   return (<div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
+    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
       <div><SL>Parametere</SL>
         <Slider label="Startbeløp" value={init} onChange={setInit} min={0} max={10000000} step={50000} format={v => fmtKr(v)} />
         <Slider label="Månedlig sparing" value={mth} onChange={setMth} min={0} max={50000} step={500} format={v => fmtKr(v)} />
@@ -376,7 +394,7 @@ function FeeImpact() {
           <div style={{ fontSize: 13, color: T.textSec, marginBottom: 4 }}>Forskjell: {fmtPct(f1)} vs {fmtPct(f3)}</div>
           <div style={{ fontSize: 34, fontWeight: 800, color: T.red }}>{fmtKr(r1.f - r3.f)}</div>
           <div style={{ fontSize: 12, color: T.textSec, marginTop: 4 }}>tapt til forvaltningskostnader</div></div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{sc.map(s => <StatBox key={s.l} label={s.l} value={fmtKr(s.r.f)} color={s.c} sub={`Tapt: ${fmtKr(r0.f - s.r.f)}`} />)}</div>
+        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{sc.map(s => <StatBox key={s.l} label={s.l} value={fmtKr(s.r.f)} color={s.c} sub={`Tapt: ${fmtKr(r0.f - s.r.f)}`} />)}</div>
         <CB label="Verdiutvikling"><MultiLineChart datasets={sc.map(s => ({ data: s.r.d, color: s.c, label: s.l }))} labels height={100} /></CB>
         <button onClick={() => setShowTbl(!showTbl)} style={{ marginTop: 12, background: "none", border: `1px solid ${T.border}`, borderRadius: 8, padding: "7px 14px", color: T.textSec, cursor: "pointer", fontSize: 12, fontWeight: 500, width: "100%" }}>{showTbl ? "Skjul" : "Vis"} tabell ▾</button></div></div>
     {showTbl && <div style={{ marginTop: 20, overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
@@ -393,7 +411,7 @@ function FIRE() {
   const [ret, setRet] = useState(7); const [swr, setSwr] = useState(3.5); const [age, setAge] = useState(35);
   const as = inc - exp, sr = inc > 0 ? (as / inc) * 100 : 0, fn = exp / (swr / 100) * 1.15;
   let y = 0, b = sav; const cd = [b]; while (b < fn && y < 80) { b = b * (1 + ret / 100) + as; y++; cd.push(b); }
-  return (<div><div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
+  return (<div><div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
     <div><SL>Parametere</SL>
       <Slider label="Årsinntekt" value={inc} onChange={setInc} min={0} max={3000000} step={50000} format={v => fmtKr(v)} />
       <Slider label="Årlige utgifter" value={exp} onChange={setExp} min={100000} max={2000000} step={25000} format={v => fmtKr(v)} />
@@ -405,7 +423,7 @@ function FIRE() {
       <div style={{ background: y < 80 ? T.greenGlow : T.orangeGlow, border: `1px solid ${y < 80 ? "rgba(48,209,88,0.15)" : "rgba(255,159,10,0.15)"}`, borderRadius: 16, padding: 18, marginBottom: 16, textAlign: "center" }}>
         <div style={{ fontSize: 13, color: T.textSec, marginBottom: 2 }}>Økonomisk uavhengig ved</div>
         <div style={{ fontSize: 34, fontWeight: 800, color: y < 80 ? T.green : T.orange }}>{y < 80 ? `${age + y} år` : "80+"}</div></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+      <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
         <StatBox label="FIRE-tall" value={fmtKr(fn)} color={T.accent} sub="Inkl. skatteeffekt" />
         <StatBox label="Sparerate" value={fmtPct(sr)} color={sr >= 50 ? T.green : sr >= 30 ? T.orange : T.red} />
         <StatBox label="Mnd. sparing" value={fmtKr(as / 12)} color={as > 0 ? T.green : T.red} />
@@ -472,7 +490,7 @@ function Loan() {
   }, [la, nom, ly, ep, lt, termFee]);
 
   return (<div>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
+    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
       <div><SL>Parametere</SL>
         <div style={{ marginBottom: 18 }}><div style={{ fontSize: 13, color: T.textSec, marginBottom: 8 }}>Lånetype</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>{[["annuitet", "Annuitetslån"], ["serie", "Serielån"]].map(([k, l]) => <button key={k} onClick={() => setLt(k)} style={{ padding: "9px", border: `1px solid ${lt === k ? T.accent : T.border}`, borderRadius: 9, background: lt === k ? T.accentGlow : "transparent", color: lt === k ? T.accent : T.textSec, cursor: "pointer", fontSize: 12.5, fontWeight: 600 }}>{l}</button>)}</div></div>
@@ -482,7 +500,7 @@ function Loan() {
         <Slider label="Termingebyr" value={termFee} onChange={setTermFee} min={0} max={100} step={5} format={v => `${v} kr/mnd`} />
         <Slider label="Ekstra nedbetaling/mnd" value={ep} onChange={setEp} min={0} max={20000} step={500} format={v => fmtKr(v)} /></div>
       <div><SL>Oversikt</SL>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
           <StatBox label="Terminbeløp" value={fmtKr(r.mp)} color={T.accent} sub={`Avdrag + renter + ${termFee} kr gebyr`} />
           <StatBox label="Effektiv rente" value={fmtPct(r.effAnnual)} color={r.effAnnual > nom ? T.orange : T.accent} sub={`Nominell: ${fmtPct(nom)}`} />
           <StatBox label="Total rentekostnad" value={fmtKr(r.totInt)} color={T.red} />
@@ -552,7 +570,7 @@ function MarketPulse() {
 
     <CB label="Fear & Greed Index" style={{ marginBottom: 20 }}><FGGauge value={23} /></CB>
 
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+    <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
       {indicators.map(cat => (
         <div key={cat.cat} style={{ background: T.surfaceAlt, borderRadius: 14, padding: 16, border: `1px solid ${T.border}` }}>
           <div style={{ fontSize: 12, color: T.textTer, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 14, fontWeight: 600 }}>{cat.cat}</div>
@@ -613,15 +631,16 @@ export default function App() {
   const render = () => { switch (active) { case "compound": return <CompoundCalc />; case "wealth": return <WealthPlanner />; case "feeimpact": return <FeeImpact />; case "fire": return <FIRE />; case "loan": return <Loan />; case "market": return <MarketPulse />; default: return null; } };
 
   return (<div style={{ minHeight: "100vh", background: T.bg, color: T.text, fontFamily: "'SF Pro Display',-apple-system,'Helvetica Neue',sans-serif", opacity: mounted ? 1 : 0, transition: "opacity 0.5s ease" }}>
-    <div style={{ padding: "28px 36px 0", maxWidth: 1120, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
+    <style>{MOBILE_CSS}</style>
+    <div className="main-padding" style={{ padding: "28px 36px 0", maxWidth: 1120, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
         <h1 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.03em", background: "linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.55) 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Finansverktøy</h1>
         <span style={{ fontSize: 12, color: T.textTer, letterSpacing: "0.05em", textTransform: "uppercase" }}>Private Banking</span></div>
       <p style={{ fontSize: 14, color: T.textSec, marginBottom: 24, lineHeight: 1.5 }}>Kalkulatorer og analyseverktøy med norske skatteregler</p></div>
-    <div style={{ maxWidth: 1120, margin: "0 auto", padding: "0 36px" }}>
-      <div style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 3, borderBottom: `1px solid ${T.border}`, marginBottom: 24 }}>
+    <div className="content-padding" style={{ maxWidth: 1120, margin: "0 auto", padding: "0 36px" }}>
+      <div className="tab-bar" style={{ display: "flex", gap: 4, overflowX: "auto", paddingBottom: 3, borderBottom: `1px solid ${T.border}`, marginBottom: 24, WebkitOverflowScrolling: "touch" }}>
         {tools.map(t => <button key={t.id} onClick={() => setActive(t.id)} style={{ padding: "9px 16px", border: "none", borderRadius: "9px 9px 0 0", cursor: "pointer", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", transition: "all 0.2s", background: active === t.id ? "rgba(255,255,255,0.05)" : "transparent", color: active === t.id ? T.text : T.textTer, borderBottom: active === t.id ? `2px solid ${T.accent}` : "2px solid transparent" }}>{t.icon} {t.label}</button>)}</div></div>
-    <div style={{ maxWidth: 1120, margin: "0 auto", padding: "0 36px 50px" }}>
-      <Card glow={T.accentGlow}>{render()}</Card>
+    <div className="bottom-padding" style={{ maxWidth: 1120, margin: "0 auto", padding: "0 36px 50px" }}>
+      <Card className="card-padding" glow={T.accentGlow}>{render()}</Card>
       <div style={{ marginTop: 20, textAlign: "center", fontSize: 11.5, color: T.textTer }}>Verktøyene er ment som veiledning og erstatter ikke profesjonell rådgivning.</div></div></div>);
 }
