@@ -255,6 +255,7 @@ function WealthPlanner() {
 
     let bal = port, cb = costBasis, exp = expense, cumSkj = 0, totTax = 0, totWT = 0;
     const data = [bal]; let depYear = null;
+    let firstYearNetto = 0, lastYearNetto = 0;
     for (let y = 1; y <= maxY; y++) {
       cumSkj += cb * SKJERMINGSRENTE;
       const wt = calcWT(bal); totWT += wt;
@@ -265,6 +266,9 @@ function WealthPlanner() {
       if (isASK) { const su = Math.min(cumSkj, wg); wtx = Math.max(0, wg - su) * EFF_SKATT; cumSkj = Math.max(0, cumSkj - su); }
       else { wtx = wg * EFF_SKATT; }
       totTax += wtx;
+      const nettoUttak = exp - wtx - wt;
+      if (y === 1) firstYearNetto = nettoUttak;
+      if (bal > 0) lastYearNetto = nettoUttak;
       cb = Math.max(0, cb - exp * (1 - gp));
       bal -= (exp + wt + wtx);
       exp *= (1 + infl / 100);
@@ -303,7 +307,7 @@ function WealthPlanner() {
       for (let y = 0; y <= maxY; y++) { const sorted = allB[y].filter(v => isFinite(v)).sort((a, b) => a - b); if (sorted.length === 0) { pData.p10.push(0); pData.p25.push(0); pData.p50.push(0); pData.p75.push(0); pData.p90.push(0); continue; } const p = v => sorted[Math.min(Math.floor(v * sorted.length), sorted.length - 1)]; pData.p10.push(p(0.1)); pData.p25.push(p(0.25)); pData.p50.push(p(0.5)); pData.p75.push(p(0.75)); pData.p90.push(p(0.9)); }
       survRate = ends.filter(v => v > 0).length / N * 100;
     }
-    return { data, depYear, pData, survivalRate: survRate, maxY, totTax, totWT, cumSkj };
+    return { data, depYear, pData, survivalRate: survRate, maxY, totTax, totWT, cumSkj, firstYearNetto, lastYearNetto };
   }, [port, costBasis, expense, expRet, infl, wTax, riskP, showMC, isASK, volPct]);
 
   return (<div>
@@ -334,11 +338,13 @@ function WealthPlanner() {
           <div style={{ fontSize: 13, color: T.textSec, marginBottom: 2 }}>Porteføljen varer i</div>
           <div style={{ fontSize: 34, fontWeight: 800, color: result.depYear ? T.red : T.green }}>{result.depYear ? `${result.depYear} år` : "60+ år"}</div>
         </div>
-        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+        <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
           <StatBox label="Uttaksrate" value={fmtPct((expense / port) * 100)} color={(expense / port) <= 0.04 ? T.green : T.orange} sub={(expense / port) <= 0.04 ? "Innenfor 4%-regelen" : "Over 4%-regelen"} />
           {showMC && result.survivalRate !== null ? (<StatBox label="Overlevelsesrate" value={fmtPct(result.survivalRate, 0)} color={result.survivalRate >= 90 ? T.green : result.survivalRate >= 70 ? T.orange : T.red} sub="Monte Carlo (500 sim.)" />) : (<StatBox label="Gevinst" value={fmtKr(port - costBasis)} color={T.green} />)}
+          <StatBox label="Netto uttak år 1" value={fmtKr(result.firstYearNetto)} color={T.green} sub={`Brutto: ${fmtKr(expense)}`} />
           <StatBox label="Akkum. skjerming" value={fmtKr(result.cumSkj)} color={T.teal} sub={`${fmtPct(SKJERMINGSRENTE * 100)} · ${isASK ? "ASK" : "VPS"}`} />
           <StatBox label="Total skatt" value={fmtKr(result.totTax + result.totWT)} color={T.red} sub={`Uttak: ${fmtKr(result.totTax)} · Formue: ${fmtKr(result.totWT)}`} />
+          <StatBox label="Årlig forbruk (brutto)" value={fmtKr(expense)} color={T.textSec} sub={`+ ${fmtPct(infl)} inflasjon/år`} />
         </div>
         {showMC && result.pData.p10.length > 1 ? (
           <CB style={{ padding: 12 }}><MCChart data={result.pData} det={result.data} width={380} height={120} maxY={result.maxY} /></CB>
@@ -353,17 +359,78 @@ function WealthPlanner() {
   </div>);
 }
 
-function MCChart({ data, det, width = 380, height = 120, maxY }) {
-  const all = [...data.p10, ...data.p90, ...det]; const mx = Math.max(...all), rng = mx || 1;
-  const toY = v => height - (v / rng) * (height - 12) - 6; const toX = (i, l) => (i / (l - 1)) * width;
-  const path = a => a.map((v, i) => `${toX(i, a.length)},${toY(v)}`).join(" ");
-  const area = (t, b) => `${t.map((v, i) => `${toX(i, t.length)},${toY(v)}`).join(" ")} ${[...b].reverse().map((v, i) => `${toX(b.length - 1 - i, b.length)},${toY(v)}`).join(" ")}`;
-  return (<div><svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: "block" }}>
-    <polygon points={area(data.p90, data.p10)} fill={T.accent} opacity="0.08" /><polygon points={area(data.p75, data.p25)} fill={T.accent} opacity="0.18" />
-    <polyline points={path(data.p50)} fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" /><polyline points={path(det)} fill="none" stroke={T.text} strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4,3" opacity="0.5" /></svg>
-    <div style={{ display: "flex", gap: 10, marginTop: 6, flexWrap: "wrap" }}>{[{ l: "Determ.", c: T.text }, { l: "Median", c: T.accent }, { l: "P25–P75", c: "rgba(41,151,255,0.3)" }, { l: "P10–P90", c: "rgba(41,151,255,0.12)" }].map(x => (<div key={x.l} style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 10, height: 4, borderRadius: 2, background: x.c }} /><span style={{ fontSize: 10, color: T.textTer }}>{x.l}</span></div>))}</div>
-    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2, fontSize: 10, color: T.textTer }}><span>År 0</span><span>År {maxY}</span></div>
-  </div>);
+function MCChart({ data, det, width: baseW = 380, height: baseH = 140, maxY }) {
+  const [hover, setHover] = useState(null);
+  const [fs, setFs] = useState(false);
+  const svgRef = useRef(null);
+
+  const w = fs ? 700 : baseW;
+  const h = fs ? 380 : baseH;
+  const all = [...data.p10, ...data.p90, ...det].filter(v => isFinite(v));
+  const mx = Math.max(...all), mn = 0, rng = mx || 1;
+  const padL = fs ? 80 : 65, padR = 15, padT = 12, padB = 26;
+  const cw = w - padL - padR, ch = h - padT - padB;
+  const len = det.length;
+
+  const toX = (i) => padL + (i / (len - 1)) * cw;
+  const toY = (v) => padT + ch - ((v - mn) / rng) * ch;
+  const path = (a) => a.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+  const area = (t, b) => `${t.map((v, i) => `${toX(i)},${toY(v)}`).join(" ")} ${[...b].reverse().map((v, i) => `${toX(b.length - 1 - i)},${toY(v)}`).join(" ")}`;
+
+  const yTicks = fs ? 8 : 5;
+  const yStep = rng / yTicks;
+  const yVals = Array.from({ length: yTicks + 1 }, (_, i) => mn + i * yStep);
+  const xTicks = fs ? 10 : 6;
+  const xStep = Math.max(1, Math.floor(len / xTicks));
+  const xIdxs = [];
+  for (let i = 0; i < len; i += xStep) xIdxs.push(i);
+  if (xIdxs[xIdxs.length - 1] !== len - 1) xIdxs.push(len - 1);
+
+  const onMove = (e) => { const rect = svgRef.current?.getBoundingClientRect(); if (!rect) return; const relX = ((e.clientX - rect.left) / rect.width) * w; const idx = Math.round(((relX - padL) / cw) * (len - 1)); if (idx >= 0 && idx < len) setHover(idx); else setHover(null); };
+
+  const svgContent = (
+    <svg ref={svgRef} width="100%" viewBox={`0 0 ${w} ${h}`} style={{ display: "block", cursor: "crosshair" }} onMouseMove={onMove}>
+      {yVals.map((v, i) => (<g key={i}><line x1={padL} y1={toY(v)} x2={w - padR} y2={toY(v)} stroke="rgba(255,255,255,0.04)" strokeWidth="1" /><text x={padL - 8} y={toY(v) + 3} textAnchor="end" fill={T.textTer} fontSize={fs ? "11" : "9"} fontFamily="system-ui">{fmtKr(v)}</text></g>))}
+      {xIdxs.map(i => (<text key={i} x={toX(i)} y={h - 4} textAnchor="middle" fill={T.textTer} fontSize={fs ? "11" : "9"} fontFamily="system-ui">År {i}</text>))}
+      <polygon points={area(data.p90, data.p10)} fill={T.accent} opacity="0.08" />
+      <polygon points={area(data.p75, data.p25)} fill={T.accent} opacity="0.18" />
+      <polyline points={path(data.p50)} fill="none" stroke={T.accent} strokeWidth="2" strokeLinecap="round" />
+      <polyline points={path(det)} fill="none" stroke={T.text} strokeWidth="1.5" strokeLinecap="round" strokeDasharray="4,3" opacity="0.5" />
+      {hover !== null && (<>
+        <line x1={toX(hover)} y1={padT} x2={toX(hover)} y2={h - padB} stroke="rgba(255,255,255,0.2)" strokeWidth="1" strokeDasharray="3,3" />
+        <circle cx={toX(hover)} cy={toY(det[hover])} r="4" fill={T.text} strokeWidth="1.5" />
+        <circle cx={toX(hover)} cy={toY(data.p50[hover])} r="4" fill={T.accent} stroke={T.text} strokeWidth="1.5" />
+      </>)}
+    </svg>
+  );
+
+  const tooltip = hover !== null && (
+    <div style={{ position: "absolute", top: 4, left: `${Math.min(Math.max((toX(hover) / w) * 100, 15), 80)}%`, transform: "translateX(-50%)", background: "rgba(16,16,20,0.96)", border: `1px solid ${T.borderLight}`, borderRadius: 9, padding: "6px 12px", pointerEvents: "none", whiteSpace: "nowrap", zIndex: 10, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}>
+      <div style={{ fontSize: 10, color: T.textTer, marginBottom: 2 }}>År {hover}</div>
+      <div style={{ fontSize: 12, color: T.text, marginBottom: 1 }}>Determ.: <strong>{fmtKr(det[hover])}</strong></div>
+      <div style={{ fontSize: 12, color: T.accent, marginBottom: 1 }}>Median: <strong>{fmtKr(data.p50[hover])}</strong></div>
+      <div style={{ fontSize: 11, color: T.textTer }}>P25–P75: {fmtKr(data.p25[hover])} – {fmtKr(data.p75[hover])}</div>
+      <div style={{ fontSize: 11, color: T.textTer }}>P10–P90: {fmtKr(data.p10[hover])} – {fmtKr(data.p90[hover])}</div>
+    </div>
+  );
+
+  const chartContent = (
+    <div style={{ position: "relative" }} onMouseLeave={() => setHover(null)}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <div style={{ fontSize: fs ? 13 : 10.5, color: T.textTer, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>Monte Carlo — {maxY} år</div>
+        <button onClick={(e) => { e.stopPropagation(); setFs(!fs); }} style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${T.border}`, borderRadius: 6, padding: "3px 8px", color: T.textSec, cursor: "pointer", fontSize: 11 }}>{fs ? "✕ Lukk" : "⛶ Fullskjerm"}</button>
+      </div>
+      {svgContent}
+      {tooltip}
+      <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+        {[{ l: "Deterministisk", c: T.text }, { l: "Median (P50)", c: T.accent }, { l: "P25–P75", c: "rgba(41,151,255,0.3)" }, { l: "P10–P90", c: "rgba(41,151,255,0.12)" }].map(x => (
+          <div key={x.l} style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 12, height: 4, borderRadius: 2, background: x.c }} /><span style={{ fontSize: 10, color: T.textTer }}>{x.l}</span></div>))}
+      </div>
+    </div>
+  );
+
+  if (fs) return (<div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.95)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 30 }} onClick={() => setFs(false)}><div style={{ maxWidth: 900, width: "100%", background: T.surface, borderRadius: 20, padding: 28, border: `1px solid ${T.border}` }} onClick={e => e.stopPropagation()}>{chartContent}</div></div>);
+  return chartContent;
 }
 
 // ══════════════════════════════════════
