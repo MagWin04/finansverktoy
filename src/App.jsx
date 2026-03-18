@@ -27,14 +27,15 @@ const FORMUE_S1 = 0.01, FORMUE_S2 = 0.011, FORMUE_BUNN = 1700000, VERDI_RABATT =
 const T = { bg: "#121418", surface: "#1a1c22", surfaceAlt: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.07)", borderLight: "rgba(255,255,255,0.12)", text: "#f0f0f3", textSec: "rgba(255,255,255,0.58)", textTer: "rgba(255,255,255,0.34)", accent: "#4da3ff", accentGlow: "rgba(77,163,255,0.1)", green: "#34d399", greenGlow: "rgba(52,211,153,0.1)", orange: "#fbbf24", orangeGlow: "rgba(251,191,36,0.1)", red: "#f87171", redGlow: "rgba(248,113,113,0.1)", purple: "#a78bfa", teal: "#67e8f9", yellow: "#fde68a", pink: "#f472b6" };
 
 // ── Shared UI ──
-function Slider({ label, value, onChange, min, max, step = 1, suffix = "", prefix = "", format, decimals }) {
+function Slider({ label, value, onChange, min, max, step = 1, suffix = "", prefix = "", format, decimals, manualMax }) {
   const [editing, setEditing] = useState(false);
   const [ev, setEv] = useState("");
   const ref = useRef(null);
+  const effectiveMax = manualMax || max;
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
   const dec = decimals ?? (step < 1 ? Math.max(1, String(step).split(".")[1]?.length || 1) : 0);
   const startEdit = () => { setEv(String(value)); setEditing(true); setTimeout(() => ref.current?.select(), 10); };
-  const commit = () => { setEditing(false); const p = parseFloat(ev.replace(/\s/g, "").replace(",", ".")); if (!isNaN(p)) onChange(Math.max(min, Math.min(max, Math.round(p / step) * step))); };
+  const commit = () => { setEditing(false); const p = parseFloat(ev.replace(/\s/g, "").replace(",", ".")); if (!isNaN(p)) onChange(Math.max(min, Math.min(effectiveMax, Math.round(p / step) * step))); };
   const onKey = (e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") setEditing(false); };
   const dv = format ? format(value) : `${prefix}${fmt(value, dec)}${suffix}`;
   return (
@@ -189,7 +190,7 @@ function CompoundCalc() {
   return (<div>
     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
       <div><SL>Parametere</SL>
-        <Slider label="Startbeløp" value={init} onChange={setInit} min={0} max={10000000} step={50000} format={v => fmtKr(v)} />
+        <Slider label="Startbeløp" value={init} onChange={setInit} min={0} max={50000000} step={50000} format={v => fmtKr(v)} manualMax={500000000} />
         <Slider label="Månedlig sparing" value={mth} onChange={setMth} min={0} max={100000} step={500} format={v => fmtKr(v)} />
         <Slider label="Forventet avkastning" value={rate} onChange={setRate} min={0} max={20} step={0.25} suffix=" %" />
         <Slider label="Tidshorisont" value={yrs} onChange={setYrs} min={1} max={50} suffix=" år" decimals={0} />
@@ -224,11 +225,10 @@ function CompoundCalc() {
 function WealthPlanner() {
   const [port, setPort] = useState(10000000);
   const [costBasis, setCostBasis] = useState(6000000);
-  const [expense, setExpense] = useState(600000);
+  const [nettoUttak, setNettoUttak] = useState(400000);
   const [infl, setInfl] = useState(2.5);
   const [wTax, setWTax] = useState(true);
   const [riskP, setRiskP] = useState("Moderat");
-  const [isASK, setIsASK] = useState(true);
 
   const profiles = {
     "Veldig defensiv": { pm: 60, re: 30, kr: 10, ak: 0 },
@@ -242,12 +242,8 @@ function WealthPlanner() {
   const expRet = (prof.pm * returns.pm + prof.re * returns.re + prof.kr * returns.kr + prof.ak * returns.ak) / 100;
   const vol = (prof.ak * 16 + prof.kr * 6 + prof.re * 3 + prof.pm * 0.5) / 100;
   const volPct = vol / 100;
-
-  // Aksjeandel for differensiert skatt
   const aksjePct = prof.ak / 100;
-  const rentePct = 1 - aksjePct;
-  // Blended skattesats: aksjegevinst 37.84%, rentegevinst 22%
-  const blendedSkatt = aksjePct * EFF_SKATT + rentePct * SKATT_ALM;
+  const blendedSkatt = aksjePct * EFF_SKATT + (1 - aksjePct) * SKATT_ALM;
 
   const result = useMemo(() => {
     const maxY = 60;
@@ -258,65 +254,91 @@ function WealthPlanner() {
       return Math.min(above, 20000000 - FORMUE_BUNN) * FORMUE_S1 + Math.max(0, above - (20000000 - FORMUE_BUNN)) * FORMUE_S2;
     };
 
-    let bal = port, cb = costBasis, exp = expense, cumSkj = 0, totalSkjEarned = 0, totTax = 0, totWT = 0;
-    const data = [bal]; let depYear = null;
-    let firstYearNetto = 0, lastYearNetto = 0;
-    for (let y = 1; y <= maxY; y++) {
-      const yearSkj = cb * SKJERMINGSRENTE;
-      cumSkj += yearSkj;
-      totalSkjEarned += yearSkj;
-      const wt = calcWT(bal); totWT += wt;
-      bal *= (1 + expRet / 100);
-      const gp = bal > cb && bal > 0 ? (bal - cb) / bal : 0;
-      const wg = exp * gp;
-      let wtx = 0;
-      if (isASK) {
-        const su = Math.min(cumSkj, wg);
-        wtx = Math.max(0, wg - su) * blendedSkatt;
-        cumSkj = Math.max(0, cumSkj - su);
-      } else {
-        wtx = wg * blendedSkatt;
-      }
-      totTax += wtx;
-      const nettoUttak = exp - wtx - wt;
-      if (y === 1) firstYearNetto = nettoUttak;
-      if (bal > 0) lastYearNetto = nettoUttak;
-      cb = Math.max(0, cb - exp * (1 - gp));
-      bal -= (exp + wt + wtx);
-      exp *= (1 + infl / 100);
-      if (bal <= 0 && !depYear) { depYear = y; bal = 0; }
-      data.push(Math.max(0, bal));
-    }
+    const runSim = (getReturn) => {
+      let bal = port, cb = costBasis, netto = nettoUttak;
+      let cumSkj = 0, totalSkjEarned = 0, totTax = 0, totWT = 0;
+      const data = [bal]; let depYear = null; let firstBrutto = 0;
 
-    // Monte Carlo always on
+      for (let y = 1; y <= maxY; y++) {
+        if (bal <= 0) { data.push(0); continue; }
+
+        // Skjerming: årlig på kostpris, akkumuleres
+        cumSkj += cb * SKJERMINGSRENTE;
+        totalSkjEarned += cb * SKJERMINGSRENTE;
+
+        // Formuesskatt
+        const wt = calcWT(bal); totWT += wt;
+
+        // Avkastning
+        const r = getReturn(y);
+        if (!isFinite(r)) { data.push(bal); continue; }
+        bal *= (1 + r);
+
+        // Uttak: gevinstdelen beskattes, skjerming reduserer skattbar gevinst
+        const gevinstAndel = bal > cb && bal > 0 ? (bal - cb) / bal : 0;
+        let brutto, wtx;
+
+        if (gevinstAndel <= 0) {
+          brutto = netto + wt; wtx = 0;
+        } else {
+          const testBrutto = netto + wt;
+          const testGevinst = testBrutto * gevinstAndel;
+          if (testGevinst <= cumSkj) {
+            // Skjerming dekker hele gevinstdelen
+            brutto = testBrutto; wtx = 0;
+            cumSkj -= testGevinst;
+          } else {
+            // Løs for brutto gitt ønsket netto:
+            // netto = brutto - max(0, brutto*gp - cumSkj)*blendedSkatt - wt
+            const denom = 1 - gevinstAndel * blendedSkatt;
+            brutto = denom > 0 ? (netto + wt - cumSkj * blendedSkatt) / denom : netto + wt;
+            brutto = Math.max(0, brutto);
+            wtx = Math.max(0, brutto * gevinstAndel - cumSkj) * blendedSkatt;
+            cumSkj = Math.max(0, cumSkj - brutto * gevinstAndel);
+          }
+          cb = Math.max(0, cb - brutto * (1 - gevinstAndel));
+        }
+
+        totTax += wtx;
+        if (y === 1) firstBrutto = brutto;
+        bal = Math.max(0, bal - brutto);
+        netto *= (1 + infl / 100);
+        if (bal <= 0 && !depYear) depYear = y;
+        data.push(Math.max(0, bal));
+      }
+      return { data, depYear, totTax, totWT, cumSkj, totalSkjEarned, firstBrutto };
+    };
+
+    const det = runSim(() => expRet / 100);
+
     const pData = { p10: [], p25: [], p50: [], p75: [], p90: [] };
     const N = 500, mu = expRet / 100;
     const allB = Array.from({ length: maxY + 1 }, () => []);
+    const mcDepYears = [];
     for (let s = 0; s < N; s++) {
       const rng = seededRandom(42 + s * 7919);
-      let sb = port, se = expense, scb = costBasis, scum = 0;
-      allB[0].push(sb);
-      for (let y = 1; y <= maxY; y++) {
-        const r = mu + volPct * boxMuller(rng);
-        if (!isFinite(r)) { allB[y].push(sb); continue; }
-        scum += scb * SKJERMINGSRENTE;
-        const swt = calcWT(sb);
-        sb *= (1 + r);
-        const gp = sb > scb && sb > 0 ? (sb - scb) / sb : 0;
-        const wg = se * gp;
-        const su = isASK ? Math.min(scum, wg) : 0;
-        const wtx = Math.max(0, wg - su) * blendedSkatt;
-        if (isASK) scum = Math.max(0, scum - su);
-        scb = Math.max(0, scb - se * (1 - gp));
-        sb = Math.max(0, sb - se - swt - wtx);
-        se *= (1 + infl / 100);
-        allB[y].push(sb);
-      }
+      const mc = runSim(() => mu + volPct * boxMuller(rng));
+      for (let y = 0; y <= maxY; y++) allB[y].push(mc.data[y] || 0);
+      mcDepYears.push(mc.depYear || maxY + 1);
     }
-    for (let y = 0; y <= maxY; y++) { const sorted = allB[y].filter(v => isFinite(v)).sort((a, b) => a - b); if (sorted.length === 0) { pData.p10.push(0); pData.p25.push(0); pData.p50.push(0); pData.p75.push(0); pData.p90.push(0); continue; } const p = v => sorted[Math.min(Math.floor(v * sorted.length), sorted.length - 1)]; pData.p10.push(p(0.1)); pData.p25.push(p(0.25)); pData.p50.push(p(0.5)); pData.p75.push(p(0.75)); pData.p90.push(p(0.9)); }
+    for (let y = 0; y <= maxY; y++) {
+      const sorted = allB[y].filter(v => isFinite(v)).sort((a, b) => a - b);
+      if (!sorted.length) { Object.values(pData).forEach(a => a.push(0)); continue; }
+      const p = v => sorted[Math.min(Math.floor(v * sorted.length), sorted.length - 1)];
+      pData.p10.push(p(0.1)); pData.p25.push(p(0.25)); pData.p50.push(p(0.5)); pData.p75.push(p(0.75)); pData.p90.push(p(0.9));
+    }
 
-    return { data, depYear, pData, maxY, totTax, totWT, cumSkj, totalSkjEarned, firstYearNetto, lastYearNetto };
-  }, [port, costBasis, expense, expRet, infl, wTax, riskP, isASK, volPct, aksjePct, blendedSkatt]);
+    // Median depletion year from MC
+    const sortedDepYears = [...mcDepYears].sort((a, b) => a - b);
+    const medianDepYear = sortedDepYears[Math.floor(N / 2)];
+    const p50DepYear = medianDepYear > maxY ? null : medianDepYear;
+
+    // Re-run deterministic but only accumulate stats until p50DepYear (or full if no depletion)
+    const statsYears = p50DepYear || (det.depYear || maxY);
+    const detStats = runSim(() => expRet / 100);
+
+    return { ...detStats, pData, maxY, p50DepYear, statsYears };
+  }, [port, costBasis, nettoUttak, expRet, infl, wTax, riskP, volPct, aksjePct, blendedSkatt]);
 
   return (<div>
     <div className="responsive-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1.15fr", gap: 28 }}>
@@ -331,27 +353,24 @@ function WealthPlanner() {
             {prof.ak > 0 && `Aksjer ${prof.ak}%`}{prof.kr > 0 && ` · Kreditt ${prof.kr}%`}{prof.re > 0 && ` · Renter ${prof.re}%`}{prof.pm > 0 && ` · Pengemarked ${prof.pm}%`} · Forv. avk. {fmtPct(expRet)} · Vol. ±{fmtPct(vol / 100 * 100, 0)}
           </div>
         </div>
-        <Slider label="Porteføljeverdi" value={port} onChange={setPort} min={500000} max={100000000} step={500000} format={v => fmtKr(v)} />
+        <Slider label="Porteføljeverdi" value={port} onChange={setPort} min={500000} max={100000000} step={500000} format={v => fmtKr(v)} manualMax={500000000} />
         <Slider label="Kostpris (innbetalt)" value={costBasis} onChange={setCostBasis} min={0} max={port} step={100000} format={v => fmtKr(v)} />
-        <Slider label="Årlig forbruk" value={expense} onChange={setExpense} min={100000} max={3000000} step={25000} format={v => fmtKr(v)} />
+        <Slider label="Årlig uttak (netto, etter skatt)" value={nettoUttak} onChange={setNettoUttak} min={0} max={3000000} step={25000} format={v => fmtKr(v)} />
         <Slider label="Inflasjon" value={infl} onChange={setInfl} min={0} max={8} step={0.25} suffix=" %" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 8 }}>
-          <Toggle label="Aksjesparekonto (ASK)" value={isASK} onChange={setIsASK} />
-          <Toggle label="Inkluder formuesskatt" value={wTax} onChange={setWTax} />
-        </div>
+        <Toggle label="Inkluder formuesskatt" value={wTax} onChange={setWTax} />
       </div>
       <div><SL>Prognose <span style={{ fontSize: 12, fontWeight: 400, color: T.teal }}>(Monte Carlo, 500 sim.)</span></SL>
-        <div style={{ background: result.depYear ? T.redGlow : T.greenGlow, border: `1px solid ${result.depYear ? "rgba(248,113,113,0.15)" : "rgba(52,211,153,0.15)"}`, borderRadius: 16, padding: 18, marginBottom: 16, textAlign: "center" }}>
-          <div style={{ fontSize: 13, color: T.textSec, marginBottom: 2 }}>Porteføljen varer i</div>
-          <div style={{ fontSize: 34, fontWeight: 800, color: result.depYear ? T.red : T.green }}>{result.depYear ? `${result.depYear} år` : "60+ år"}</div>
+        <div style={{ background: result.p50DepYear ? T.redGlow : T.greenGlow, border: `1px solid ${result.p50DepYear ? "rgba(248,113,113,0.15)" : "rgba(52,211,153,0.15)"}`, borderRadius: 16, padding: 18, marginBottom: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 13, color: T.textSec, marginBottom: 2 }}>Porteføljen varer i (median)</div>
+          <div style={{ fontSize: 34, fontWeight: 800, color: result.p50DepYear ? T.red : T.green }}>{result.p50DepYear ? `${result.p50DepYear} år` : "60+ år"}</div>
         </div>
         <div className="stat-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
-          <StatBox label="Uttaksrate" value={fmtPct((expense / port) * 100)} color={T.textSec} />
-          <StatBox label="Netto uttak år 1" value={fmtKr(result.firstYearNetto)} color={T.green} sub={`Brutto: ${fmtKr(expense)}`} />
-          <StatBox label="Eff. skattesats" value={fmtPct(blendedSkatt * 100)} color={T.orange} sub={`Aksje: ${fmtPct(EFF_SKATT * 100)} · Rente: ${fmtPct(SKATT_ALM * 100)}`} />
-          <StatBox label="Skjerming (opptjent)" value={fmtKr(result.totalSkjEarned)} color={T.teal} sub={`Gjenstår: ${fmtKr(result.cumSkj)} · ${fmtPct(SKJERMINGSRENTE * 100)}/år`} />
-          <StatBox label="Total skatt" value={fmtKr(result.totTax + result.totWT)} color={T.red} sub={`Uttak: ${fmtKr(result.totTax)} · Formue: ${fmtKr(result.totWT)}`} />
-          <StatBox label="Årlig forbruk (brutto)" value={fmtKr(expense)} color={T.textSec} sub={`+ ${fmtPct(infl)} inflasjon/år`} />
+          <StatBox label="Netto uttak år 1" value={fmtKr(nettoUttak)} color={T.green} sub={`Brutto: ~${fmtKr(result.firstBrutto)}`} />
+          <StatBox label="Uttaksrate (netto)" value={fmtPct(port > 0 ? nettoUttak / port * 100 : 0)} color={T.textSec} />
+          <StatBox label="Eff. skattesats" value={fmtPct(blendedSkatt * 100)} color={T.orange} sub={`Aksje ${fmtPct(EFF_SKATT * 100)} · Rente ${fmtPct(SKATT_ALM * 100)}`} />
+          <StatBox label="Skjerming opptjent" value={fmtKr(result.totalSkjEarned)} color={T.teal} sub={`Over ${result.statsYears} år`} />
+          <StatBox label={`Total skatt (${result.statsYears} år)`} value={fmtKr(result.totTax + result.totWT)} color={T.red} sub={`Uttak: ${fmtKr(result.totTax)} · Formue: ${fmtKr(result.totWT)}`} />
+          <StatBox label="Urealisert gevinst" value={fmtKr(port - costBasis)} color={port > costBasis ? T.green : T.red} sub={`${fmtPct(costBasis > 0 ? (port - costBasis) / costBasis * 100 : 0)} avkastning`} />
         </div>
         <CB style={{ padding: 12 }}>
           <MCChart data={result.pData} det={result.data} width={380} height={140} maxY={result.maxY} />
@@ -359,7 +378,9 @@ function WealthPlanner() {
       </div>
     </div>
     <div style={{ marginTop: 18, padding: 14, background: T.surfaceAlt, borderRadius: 12, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}><strong style={{ color: T.textSec }}>Skattemodell ({isASK ? "ASK" : "VPS"}):</strong> {isASK ? "Skjermingsfradrag beregnes på innbetalt beløp (kostpris) × skjermingsrente (" + fmtPct(SKJERMINGSRENTE * 100) + "). Akkumuleres årlig og reduserer skattepliktig gevinst ved uttak." : "Skatt på gevinstdelen ved hvert uttak. Ingen skjermingsfradrag."} Aksjegevinst: {fmtPct(EFF_SKATT * 100)}. Rentegevinst: {fmtPct(SKATT_ALM * 100)}. Blandet sats ({prof.ak}% aksjer): {fmtPct(blendedSkatt * 100)}. Formuesskatt: {fmtPct(FORMUE_S1 * 100)}/{fmtPct(FORMUE_S2 * 100)}.</div>
+      <div style={{ fontSize: 11, color: T.textTer, lineHeight: 1.7 }}>
+        <strong style={{ color: T.textSec }}>Skattemodell:</strong> Skjermingsfradrag ({fmtPct(SKJERMINGSRENTE * 100)}/år) beregnes årlig på kostpris og akkumuleres. Gevinstdelen av hvert uttak beskattes etter fradrag for skjerming. Aksjegevinst: {fmtPct(EFF_SKATT * 100)}. Rentegevinst: {fmtPct(SKATT_ALM * 100)}. Blandet ({prof.ak}% aksjer): {fmtPct(blendedSkatt * 100)}. I ASK er de første uttakene skattefrie (opp til innbetalt beløp + skjerming), noe som gir en fordel de første årene. Deterministisk linje = konstant avkastning. Median = midtpunkt av 500 sim. med volatilitet.
+      </div>
     </div>
   </div>);
 }
