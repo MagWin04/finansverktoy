@@ -114,7 +114,7 @@ export default function EvidenceAllocation() {
             <StatBox label="Aksje / Renter" value={`${active.eq} % / ${active.bonds} %`} color={T.accent} />
             <StatBox label="Modellert avkastning" value={fmtPct(sim.effEr, 1)} color={T.green} sub="Før kostnader og skatt" />
             <StatBox label="Estimert volatilitet" value={`±${fmtPct(active.vol, 1)}`} color={T.orange} />
-            <StatBox label="Indeks 100 etter {yrs} år".replace("{yrs}", yrs) value={`${Math.round(
+            <StatBox label={`Indeks 100 etter ${yrs} år`} value={`${Math.round(
               modelKey === "cederburg" ? sim.sCed[yrs] : modelKey === "famaFrench" ? sim.sFF[yrs] : sim.s6040[yrs]
             )}`} color={T.teal} />
           </div>
